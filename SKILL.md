@@ -60,6 +60,8 @@ ID (e.g. `SC-3`) in review comments.
 | ID-8 | Group `use` statements into three blank-line-separated blocks in this order: **`std`/`core`/`alloc`, external crates, internal (`crate`, `super`, `self`).** Keep each block alphabetized. This is `rustfmt`'s `group_imports = "StdExternalCrate"`, so let the formatter enforce it. |
 | ID-9 | Use `std::ops::Not` (`x.not()`) instead of a prefix `!` when the negation wraps a call, a macro, or a parenthesized expression. Keep prefix `!` for a bare identifier in a plain `if`. |
 | ID-10 | Keep every list in `Cargo.toml` alphabetized: dependencies, dev-dependencies, build-dependencies, features, and workspace members. |
+| ID-11 | Put a type hint on the RHS via turbofish (`.collect::<Vec<_>>()`), never on the LHS binding (`let x: Vec<_> = ...`). |
+| ID-12 | Use `_` for any generic parameter the compiler can infer from context, rather than spelling out the concrete type. |
 
 ## Tests (`references/tests.md`)
 
