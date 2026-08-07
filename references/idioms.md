@@ -1,6 +1,6 @@
 # Idioms
 
-Rules `ID-1` … `ID-10`. The through-line: **make the reader's job easy at the
+Rules `ID-1` … `ID-12`. The through-line: **make the reader's job easy at the
 call site, not just at the definition.**
 
 ## ID-1: Enums, not boolean flags
@@ -298,3 +298,45 @@ logos = "0.14"
 
 Section order itself follows Cargo convention (`[package]`, `[dependencies]`,
 `[dev-dependencies]`, …), not alphabetical.
+
+## ID-11: Type-hint on the RHS, via turbofish
+
+When a call's return type needs a hint, put it on the call with `::<...>`, not
+on the binding.
+
+```rust
+// DO
+let names = names_iter.collect::<Vec<_>>();
+
+// DON'T
+let names: Vec<_> = names_iter.collect();
+```
+
+The LHS states a *name*; the RHS states an *expression*, and the hint is a fact
+about that expression, not the binding. Keeping it on the RHS also means the
+hint travels with the call if the result is later returned or passed inline
+instead of bound at all, and it keeps every binding in the function shaped the
+same way (`let x = ...;`) so the reader scans names on the left without
+detouring through types.
+
+## ID-12: Infer with `_` wherever the compiler can
+
+Once one part of a type is pinned down elsewhere, an explicit repeat of the
+rest is noise. Write `_` for any parameter the compiler can recover from
+context.
+
+```rust
+// DO
+let names = names_iter.collect::<Vec<_>>();
+let cache = HashMap::<_, _>::new();
+
+// DON'T
+let names = names_iter.collect::<Vec<String>>();
+let cache = HashMap::<String, Vec<u8>>::new();
+```
+
+This pairs with ID-11: the turbofish supplies only the piece of information the
+compiler actually needs (`Vec` over, say, `HashSet`; `HashMap` over `BTreeMap`),
+and `_` leaves every parameter to inference instead of restating what the rest
+of the line already fixes. If the compiler can't infer it, it will say so, and
+that error is the signal to spell out that one parameter, not the whole type.
