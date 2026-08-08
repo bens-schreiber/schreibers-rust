@@ -1,101 +1,187 @@
 ---
 name: schreibers-rust
-description: Ben Schreiber's Rust style guide. Use whenever writing, editing, or reviewing Rust (.rs) code, or when asked to fix nits, clean up style, or make code idiomatic. Governs scoping and block structure, module vs. struct choices, visibility, idiomatic trait usage, import grouping, test structure/naming, and doc comments. Not for generated or vendored Rust.
+description: Ben Schreiber's Rust style guide. Use whenever writing, editing, or reviewing Rust (.rs) code, or when asked to fix nits, clean up style, or make code idiomatic. Covers scoping and blocks, module vs. struct, visibility, idioms, imports, test structure and naming, and doc comments. Not for generated or vendored Rust.
 ---
 
 # Schreiber's Rust Style
 
-A house style for Rust, on top of `rustfmt` and `clippy` defaults.
+House style on top of `rustfmt` and `clippy` defaults. `references/rules.md` has
+worked examples.
 
-## How to use this skill
+**Judgement applies to the fix, not to the trigger.** Every trigger here is
+countable: a read count, a per-phase line count, a shared fixture. Count it.
+Judgement picks the remedy once a rule fires; it never excuses you from noticing
+that it fired.
 
-These are **preferences, not a linter.** Every rule names the problem it solves;
-serve the reason, not the letter. A rule applied against its own reasoning is a
-bug, not compliance.
+Apply only to code you are writing or editing. Skip generated, vendored, and
+macro-heavy files. When rules collide: correctness, then the file's existing
+conventions, then the more specific rule. Reviewing: cite the ID, and raise a
+rule only where following it measurably helps the reader.
 
-Apply this only to code you are already writing or editing. Do not restyle
-untouched code, and skip generated, vendored, and macro-heavy files.
+## The shape rules
 
-Reviewing: raise a rule only where following it would measurably help the
-reader. Cite the ID (e.g. `SC-3`).
+Read these against the code you write, not once at the start.
 
-**When rules collide:** correctness first, then the conventions already in the
-file, then the more specific rule.
+### SC-1: bind at the read count
 
-The tables below are the rules. Open a reference file only when a table row
-leaves you genuinely unsure how it applies; each section says when that is.
+Count the later scopes that read a local. **Two or more:** top level. **Exactly
+one:** inside the thing that reads it, never at top level. The trigger is the
+read count, not the line count: a one-line binding read once is the most common
+instance, not an exception.
 
-## Scoping (`references/scoping.md`)
+Fix it in this order: a method chain where one exists, a block expression where
+the computation needs statements, an extracted `fn` where it deserves a name.
 
-Open it when restructuring a function body or deciding between a block, a
-closure, and a helper `fn`.
+```rust
+// DO: no name for the token vector survives into the rest of the function
+let mut parser = Parser {
+    tokens: Lexer::new(source)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .peekable(),
+};
+
+// DON'T: one line, read once, and still top-level state the reader must track
+let tokens = Lexer::new(source).collect::<Result<Vec<_>, _>>()?;
+
+let mut parser = Parser { tokens: tokens.into_iter().peekable() };
+```
+
+Two exceptions: a short prelude to the function's tail expression, and a binding
+whose name is what keeps a nearby `.expect()` or error message readable (ID-2).
+
+### SC-2 and TS-6: "block" means `{}`, not a paragraph
+
+**SC-2** fences unrelated units of work inside a function, each of several
+lines, under a one-line comment naming it. **TS-6** coalesces tests sharing most
+of their Arrange into one function, one case per block, hoisting only the shared
+Arrange and leaving each case its own Act and Assert. A naming comment above
+loose statements is a divider comment (SC-6), and it lets neighboring units
+shadow each other's bindings.
+
+```rust
+// DO
+// Case: object
+{
+    let value = parse("{}")?;
+    assert_eq!(value, Value::Object(Vec::new()));
+}
+
+// DON'T: no braces, so the next `value` silently shadows this one
+// Case: object
+let value = parse("{}")?;
+assert_eq!(value, Value::Object(Vec::new()));
+```
+
+**No shared Arrange means no TS-6.** Captioning independent assertions is not
+coalescing; it is DOC-4 noise around tests that should have stayed separate.
+
+```rust
+// DON'T: nothing is hoisted, and each label restates the line under it
+// Case: null
+assert_eq!(parse("null"), Ok(Value::Null));
+
+// Case: true
+assert_eq!(parse("true"), Ok(Value::Bool(true)));
+```
+
+### TS-3: label all three phases when any one exceeds a line
+
+Count the phases separately. Skip the labels only when all three are one-liners;
+a one-line Act against a ten-line Assert still gets all three. An Arrange living
+outside the body (a module-level `const`, a fixture `fn`) still counts as a
+phase: label the line that pulls it in, or where there is none, label the Act
+and Assert alone. Never extend a label with narrative.
+
+```rust
+// DO: the Assert alone is over one line, so all three phases are labeled
+#[test]
+fn settings_document_parses_to_its_entries() {
+    // Arrange
+    let source = SETTINGS;
+
+    // Act
+    let value = parse(source).expect("SETTINGS is a valid document");
+
+    // Assert
+    assert_eq!(value["retries"], Value::Number(3.0));
+    assert_eq!(value["region"], Value::String("us-east-2b".into()));
+}
+```
+
+## Scoping
 
 | ID | Rule |
 | --- | --- |
-| SC-1 | If a local exists only to compute one later value, wrap it in a block expression so it never reaches the function's top level. For multi-line intermediates that are genuinely dead afterward; a short prelude to a return is fine as-is, and a method chain or an extracted `fn` often beats a block. |
-| SC-2 | A local belongs at function top level when two or more later scopes read it. |
-| SC-3 | Use a bare `{}` block to separate unrelated units of work inside one function, each with a one-line comment naming what it does. For units of several lines each, not for every pair of statements. |
-| SC-4 | Nest a helper `fn` inside its only caller when it is short and needs no test of its own. Keep it at module scope if it is unit-tested, doc-tested, or long enough to displace the caller's own body. |
-| SC-5 | Prefer a closure over a nested `fn` when the logic wants to capture from the enclosing scope. Use a nested `fn` when everything arrives as explicit parameters. Never re-pass a value as a closure parameter that the closure could have captured. |
-| SC-6 | Declare closures at the top of the function body, before first use: the one deliberate exception to SC-1. Not when hoisting would extend a mutable capture across code that needs the same borrow. |
-| SC-7 | Never write divider comments (`// ------`, `// ==== FOO ====`). A divider means scoping failed: use a `{}` block inside a function, or a `mod` / separate file / separate crate outside one. |
+| SC-1 | Shape rule, above. |
+| SC-2 | Shape rule, above. |
+| SC-3 | Nest a helper `fn` in its only caller when short. Module scope if unit-tested, doc-tested, or long enough to displace the caller's body. |
+| SC-4 | Closure when it captures from the enclosing scope, nested `fn` when everything arrives as parameters. Never re-pass what a closure could capture. |
+| SC-5 | Closures go at the top of the function body: the one exception to SC-1. Not when hoisting would extend a mutable capture across code needing the same borrow. |
+| SC-6 | No divider comments (`// ------`, `// ==== FOO ====`). Use a `{}` block inside a function, a `mod` or separate file outside one. |
 
-## Modules and structs (`references/modules-and-structs.md`)
-
-Open it when adding a module or type, or changing visibility.
+## Modules and structs
 
 | ID | Rule |
 | --- | --- |
-| MS-1 | Group related items in a `mod` instead of prefixing free functions with a shared name (`mod util { fn foo }`, not `fn util_foo`). |
-| MS-2 | Use the narrowest visibility that compiles: private → `pub(super)` → `pub(crate)` → `pub`. Reach for `pub` only when something outside the crate uses it. Speculative `pub` is API surface someone must now keep stable. |
-| MS-3 | When an item is widened in visibility only so tests can reach it, say so in a comment directly above it: `// Visible for tests.` Don't repeat the visibility keyword; the signature below already states it. |
-| MS-4 | Prefer a `mod` of free functions over a zero-field struct that exists only to namespace an `impl`. |
-| MS-5 | Prefer a struct with a real `impl` over a `mod` when the same set of non-trivial parameters is threaded through several functions. Store them once instead of repeating them in every signature. |
-| MS-6 | Split an `impl` block or `mod` past ~400 lines along a seam (responsibility, sub-resource, lifecycle stage) that leaves each piece cohesive. If no honest seam exists, that is the finding, and it outranks the line count. |
+| MS-1 | A `mod`, not a shared prefix on free functions: `mod util { fn parse }`, not `fn util_parse`. |
+| MS-2 | Narrowest visibility that compiles: private → `pub(super)` → `pub(crate)` → `pub`. `pub` only for something used outside the crate. |
+| MS-3 | Visibility widened only for tests gets `// Visible for tests.` above it, without repeating the keyword. |
+| MS-4 | A `mod` of free functions, not a zero-field struct that only namespaces an `impl`. |
+| MS-5 | A struct with a real `impl`, not a `mod`, once the same non-trivial parameters thread through several functions. |
+| MS-6 | Split an `impl` or `mod` past ~400 lines along a seam (responsibility, sub-resource, lifecycle stage) leaving each piece cohesive. No honest seam is itself the finding, and outranks the line count. |
 
-## Idioms (`references/idioms.md`)
-
-Open it when unsure whether ID-8 or ID-10 applies to a specific expression.
+## Idioms
 
 | ID | Rule |
 | --- | --- |
-| ID-1 | Prefer an enum to a `bool` parameter or field: a `bool` makes the reader decode what `true` means at the call site. Two bools whose combination has an impossible state are one enum; independent flags stay separate bools. |
-| ID-2 | Outside tests, handle the error path instead of panicking. When a panic is genuinely unreachable, use `.expect("<why it cannot fail>")`, never a bare `.unwrap()`: the reason belongs in the panic message, where a log will show it. Reserve `// SAFETY:` for `unsafe` blocks. |
-| ID-3 | Implement the standard traits rather than hand-rolling their contract: `Default`, `From`, `TryFrom`, `Display`, `FromStr`, `AsRef`, `Iterator`. Implement `From`, not `Into` (the blanket impl gives you `Into` free). `Into` as a generic bound is fine. |
-| ID-4 | Exit early instead of nesting the happy path. Lean on `let ... else`, `if let`, and `?`. |
-| ID-5 | Name a local after the field it will fill, then use field-init shorthand. |
-| ID-6 | Prefer pattern matching to manual field access plus conditionals wherever it makes control flow more explicit. Use `matches!` when all you need out of the pattern is a `bool`. |
-| ID-7 | Group `use` statements into three blank-line-separated blocks: **`std`/`core`/`alloc`, external crates, internal (`crate`, `super`, `self`)**, alphabetized within each. `rustfmt`'s `group_imports` does this but is nightly-only, so on stable it is by hand. |
-| ID-8 | Use `.not()` when negating a chain you are continuing (`x.is_empty().not().then(...)`) or a `matches!`. Keep prefix `!` in `if`/`while` condition position. |
-| ID-9 | Keep every list in `Cargo.toml` alphabetized: dependencies, dev-dependencies, build-dependencies, features, and workspace members. |
-| ID-10 | Keep compound generic types (`Vec<_>`, `HashMap<_, _>`) off the LHS: hint on the RHS with turbofish (`.collect::<Vec<_>>()`). Plain scalars, `const`/`static`, signatures, and expressions with no turbofish to hang a hint on are fine annotated. Judgement call, not a ban. |
-| ID-11 | Use `_` for any generic parameter the compiler can infer, rather than spelling out the concrete type. |
+| ID-1 | An enum, not a `bool` parameter or field. Two bools with an impossible combination are one enum; independent flags stay separate. |
+| ID-2 | Outside tests, handle the error path. An unreachable panic is `.expect("<why it cannot fail>")`, never bare `.unwrap()`, never a `// PANIC:` comment. `// SAFETY:` is for `unsafe` only. |
+| ID-3 | Implement the standard traits instead of hand-rolling their contract: `Default`, `From`, `TryFrom`, `Display`, `FromStr`, `AsRef`, `Iterator`. `From`, never `Into`; `Into` as a bound is fine. |
+| ID-4 | Exit early instead of nesting the happy path: `let ... else`, `if let`, `?`. |
+| ID-5 | Name a local after the field it fills, then use field-init shorthand. |
+| ID-6 | Pattern matching over field access plus conditionals. `matches!` when all you need is a `bool`. |
+| ID-7 | Three blank-line-separated `use` blocks, alphabetized within each: `std`/`core`/`alloc`, external crates, internal (`crate`, `super`, `self`). Stable `rustfmt` will not group them; do it by hand. |
+| ID-8 | `.not()` when negating a chain you continue (`x.is_empty().not().then(...)`) or a `matches!`. Prefix `!` stays in `if`/`while` conditions. |
+| ID-9 | Every list in `Cargo.toml` alphabetized: dependencies, dev-dependencies, build-dependencies, features, workspace members. |
+| ID-10 | Compound generics off the LHS: `.collect::<Vec<_>>()`, not `let names: Vec<_> =`. Scalars, `const`/`static`, signatures, and expressions with no turbofish stay LHS-annotated. |
+| ID-11 | `_` for any generic parameter the compiler can infer. |
 
-## Tests (`references/tests.md`)
-
-Open it when writing a new test module or restructuring existing tests; the
-table covers single-test edits.
+## Tests
 
 | ID | Rule |
 | --- | --- |
-| TS-1 | Unit tests go in a `#[cfg(test)] mod tests` in the file under test; integration tests go in the crate's `tests/` directory. |
-| TS-2 | Name tests `namespace_input_expectation`: subject, the input condition, then the expected outcome. Drop `namespace` when the module or file name already supplies it. |
-| TS-3 | Label a test body with `// Arrange`, `// Act`, `// Assert` once the three phases are not obvious at a glance. Skip the labels when each phase is a single line. Never extend a label with narrative. |
-| TS-4 | Bind a value in `Arrange` when it is used more than once, so a call and its assertion cannot drift apart. A literal used exactly once stays inline at its use site: a `const` per literal is noise, not clarity. |
-| TS-5 | Give a custom panic message to any `assert*` whose failure reason is not obvious from the surrounding code. The explanation belongs in the message, not in a comment above it. |
-| TS-6 | Coalesce tests that share most of their Arrange into one function with a `// Case: <name>` block per case. Hoist only the shared Arrange; each case keeps its own Act and Assert. |
-| TS-7 | Once a `namespace_*` group passes about four test functions, move it into its own `mod` or file so the prefix can be dropped (TS-2). Only when you are already restructuring that group, not as a side effect of adding one test. TS-7 splits by subject; TS-6 merges by fixture. |
-| TS-8 | Where you would otherwise write `foo`/`bar`/`alice`/`bob`, use a Vox Machina name (`vex`, `vax`, `percy`, `keyleth`, `grog`, `pike`, `scanlan`). Placeholders only. A value modeling a real domain thing (a site, host, region, customer) gets a plausible domain name, and existing codebase convention wins over both. |
+| TS-1 | Unit tests in a `#[cfg(test)] mod tests` in the file under test; integration tests in the crate's `tests/`. |
+| TS-2 | `namespace_input_expectation`: subject, input condition, expected outcome. Drop `namespace` when the module or file supplies it. No `test_` prefix. |
+| TS-3 | Shape rule, above. |
+| TS-4 | Bind a value in Arrange when used more than once, so a call and its assertion cannot drift. Used once, it stays inline. |
+| TS-5 | Custom panic message on any `assert*` whose failure reason is not obvious. It goes in the message, not a comment above it. |
+| TS-6 | Shape rule, above. |
+| TS-7 | Three or more tests sharing a `namespace_*` prefix become a sibling `#[cfg(test)] mod namespace_tests`, and the prefix comes off the test names (TS-2). **Count the group as it will stand when you finish, not as it stands mid-write.** TS-6 merges by fixture, TS-7 splits by subject. |
+| TS-8 | Test data that models a real domain thing (a site, host, region, tenant, SKU, path) gets a plausible value, not a placeholder. `"us-east-2b"`, not `"foo"`. Codebase convention wins. |
 
-## Documentation (`references/documentation.md`)
-
-Open it when writing a `//!` header or a doc comment with structure.
+## Documentation
 
 | ID | Rule |
 | --- | --- |
-| DOC-1 | Use markdown and line breaks liberally in doc comments: a one-line summary, a blank `///` line, then paragraphs, `#` headings, and bullet lists. Indent bullet continuations under the bullet's text, or rustdoc drops them out of the list. It should read well as source and as rendered rustdoc. |
-| DOC-2 | Separate a documented field from the undocumented fields that follow it with a blank line, so the doc comment's scope is unambiguous. |
-| DOC-3 | Give every crate and non-obvious module a `//!` header at the top of the file, above the imports, covering purpose, public API, and design quirks. |
-| DOC-4 | Do not document what the name already says. If a name needs a comment to be understood, rename it. |
-| DOC-5 | Use rustdoc's conventional headings for their conventional meanings only: `# Safety` for `unsafe` contracts, `# Panics`, `# Errors`, `# Examples`. Anything else gets a heading of your own wording. |
-| DOC-6 | Never write an em dash, in doc comments, comments, or commit messages. Use a period, comma, colon, semicolon, or parentheses instead, whichever the sentence calls for. |
+| DOC-1 | Markdown and line breaks in doc comments: one-line summary, blank `///`, then paragraphs, `#` headings, bullets. Indent bullet continuations under the bullet's *text* or rustdoc drops them from the list. |
+| DOC-2 | Blank line between a documented field and the undocumented fields below it. |
+| DOC-3 | `//!` header on every crate and non-obvious module, above the imports: purpose, public API, design quirks. |
+| DOC-4 | Do not document what the name says. If a name needs a comment to be understood, rename it. |
+| DOC-5 | `# Safety`, `# Panics`, `# Errors`, `# Examples` for their conventional meanings only. Anything else gets your own heading. |
+| DOC-6 | Never an em dash, in doc comments, comments, or commit messages. Use a period, comma, colon, semicolon, or parentheses. |
+
+## Before you call it done
+
+Not done until these have been run over the diff. Report what each caught, by
+ID, including the ones that caught nothing.
+
+```sh
+rg -n '^\s{4,8}let ' src/ tests/   # SC-1: exactly one later reader means push it in
+rg -n -A1 '// Case:' src/ tests/   # TS-6: next line is `{`, shared Arrange hoisted above
+rg -n -A6 '#\[test\]' src/ tests/  # TS-3: any phase over one line means all three labels
+rg -n '\.unwrap\(\)' src/          # ID-2: every hit (tests are exempt, so src/ only)
+rg -n 'let \w+: (Vec|HashMap|HashSet|BTreeMap)<' src/ tests/  # ID-10: every hit
+rg -o --no-filename '^\s+fn ([a-z]+)_' -r '$1' src/ tests/ | sort | uniq -c | sort -rn | head
+                                   # TS-7: a count of three or more needs its own mod
+```
