@@ -117,11 +117,34 @@ mod render {
 }
 ```
 
-## MS-6: splitting a large `impl`
+## MS-6: componentize, do not re-file the `impl`
 
-Prefer several `impl` blocks in separate files over one sprawling block:
-`src/renderer/mod.rs` holds the struct, `src/renderer/layout.rs` an `impl` for
-measuring and placing, `src/renderer/paint.rs` an `impl` for emitting output.
+More `impl` blocks on the same type, in one file or several, still hand every
+method `&mut self` on the whole struct. Extract the cluster instead; the method
+prefixes it sheds (`comment_queue` to `queue`) confirm the seam.
+
+```rust
+// DO: comment state is reachable only from the methods that own it
+struct CommentCtx {
+    pending: Vec<Comment>,
+    last_flushed_line: u32,
+}
+
+struct LanguageFormatter {
+    comments: CommentCtx,
+    indent: u32,
+}
+
+// DON'T: a second impl block or comment_* namespace 
+impl LanguageFormatter {
+    fn comment_queue(&mut self, comment: Comment) { /* ... */ }
+}
+```
+
+Struct or `mod` is MS-4 and MS-5, on the cluster's state: `CommentCtx` holds
+state across calls, whereas an `escape` cluster that only transforms arguments
+is a `mod` of free functions. Files follow the components, so
+`src/formatter/comments.rs` holds `CommentCtx` and its `impl` together.
 
 ## ID-2: the reason goes in the panic message
 

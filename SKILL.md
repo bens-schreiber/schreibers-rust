@@ -129,7 +129,7 @@ fn settings_document_parses_to_its_entries() {
 | MS-3 | Visibility widened only for tests gets `// Visible for tests.` above it, without repeating the keyword. |
 | MS-4 | A `mod` of free functions, not a zero-field struct that only namespaces an `impl`. |
 | MS-5 | A struct with a real `impl`, not a `mod`, once the same non-trivial parameters thread through several functions. |
-| MS-6 | Split an `impl` or `mod` past ~400 lines along a seam (responsibility, sub-resource, lifecycle stage) leaving each piece cohesive. No honest seam is itself the finding, and outranks the line count. |
+| MS-6 | Count the methods in an `impl` that serve one feature rather than the type's main job. **Three or more:** that cluster is its own component, by MS-4 or MS-5. Extracting is the fix, not more `impl` blocks on the same type. No honest seam is itself the finding, and outranks any line count. |
 
 ## Idioms
 
