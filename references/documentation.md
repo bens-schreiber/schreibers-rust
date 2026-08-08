@@ -1,6 +1,6 @@
 # Documentation
 
-Rules `DOC-1` … `DOC-7`. The through-line: **write for someone who just opened
+Rules `DOC-1` … `DOC-6`. The through-line: **write for someone who just opened
 this file, and say only what the code cannot.**
 
 ## DOC-1: Markdown and line breaks, liberally
@@ -49,33 +49,16 @@ pub struct Entry {
 The first line is special: rustdoc uses it alone as the summary in index and
 search results. Keep it to one sentence that stands on its own.
 
-## DOC-2: Align bullet continuations
+Note the bullet continuations above: they indent to sit under the bullet's
+*text*, not the marker. rustdoc parses the misaligned form as a new paragraph
+and drops it out of the list.
 
-Continuation lines indent to sit under the bullet's text, not the marker.
-rustdoc parses the misaligned form as a new paragraph and drops it out of the
-list.
-
-```rust
-/// - Here is a great reason why this matters,
-///   and this line continues the same bullet.
-/// - Another good reason.
-```
-
-## DOC-3: Blank line after a documented field
+## DOC-2: Blank line after a documented field
 
 Separate a documented field from the undocumented fields below it, so the
 comment's scope is unambiguous.
 
 ```rust
-// DO
-pub struct Entry {
-    /// Interned; unique within a single parser.
-    pub name: Symbol,
-
-    pub line: u32,
-    pub column: u32,
-}
-
 // DON'T: does the comment cover line and column too?
 pub struct Entry {
     /// Interned; unique within a single parser.
@@ -85,7 +68,7 @@ pub struct Entry {
 }
 ```
 
-## DOC-4: `//!` headers on crates and non-obvious modules
+## DOC-3: `//!` headers on crates and non-obvious modules
 
 Every crate root, and every module whose job is not self-evident, opens with a
 `//!` block at the very top of the file, above the imports. Cover:
@@ -113,7 +96,7 @@ use crate::ast::Node;
 
 Link to items with rustdoc's `[`Item`]` syntax so the header stays navigable.
 
-## DOC-5: Do not restate the name
+## DOC-4: Do not restate the name
 
 If the name already says it, say nothing. If the name does not say it, fix the
 name.
@@ -145,7 +128,7 @@ invariants, failure modes, cost, ordering.
 pub struct PersonBuilder { /* ... */ }
 ```
 
-## DOC-6: Conventional headings keep their conventional meanings
+## DOC-5: Conventional headings keep their conventional meanings
 
 rustdoc has established headings that readers and lints rely on:
 
@@ -169,21 +152,13 @@ write your own heading:
 /// Caution: may be fascinating!
 ```
 
-## DOC-7: Never write an em dash
+## DOC-6: Never write an em dash
 
 Not in doc comments, not in regular comments, not in commit messages or any
 other prose this skill governs. Use a period, comma, colon, semicolon, or
 parentheses instead: whichever one the sentence actually calls for.
 
-Why: an em dash lets a writer skip deciding how two clauses relate. A colon
-says "the second part explains the first"; a semicolon says "these are two
-complete, related thoughts"; parentheses say "this is a side note." Picking
-one is part of writing the sentence clearly.
-
 ```rust
-// DO
-/// Entries are interned, so two entries with the same name share storage.
-
 // DO
 /// Entries are interned: two entries with the same name share storage.
 

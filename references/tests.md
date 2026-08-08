@@ -55,16 +55,19 @@ explaining, the explanation belongs in an assertion message (TS-5) or in a
 better-named test or constant.
 
 ```rust
-// DO
+// DO: three phases, none of them a single line
 // Arrange
-const SRC: &str = "let vex = 1;";
-let lexer = Lexer::new();
+let mut lexer = Lexer::new();
+lexer.set_mode(Mode::Strict);
+let src = fixture("manifest.txt");
 
 // Act
-let tokens = lexer.tokenize(SRC);
+let tokens = lexer.tokenize(&src);
+let idents = tokens.iter().filter(|t| t.is_ident());
 
 // Assert
 assert_eq!(tokens.len(), 5);
+assert_eq!(idents.count(), 2);
 
 // DON'T: narrative bolted onto the label
 // Arrange: set up the lexer and the source string we will use
@@ -78,14 +81,13 @@ fn tokenize_empty_input_returns_no_tokens() {
 }
 ```
 
-## TS-4: Every value is a named constant in Arrange
+## TS-4: Bind what repeats, inline what doesn't
 
-No literal appears inside `Act` or `Assert`. A value used by both a call and an
-assertion must come from a single binding, so the two cannot drift apart in
-future edits.
+The reason to bind is **drift**: if a call and its assertion each spell out the
+same literal, an edit to one silently passes. One binding makes that impossible.
 
 ```rust
-// DO
+// DO: "keyleth" is used twice, so it is bound once
 #[test]
 fn roster_known_member_is_returned() {
     // Arrange
@@ -99,25 +101,28 @@ fn roster_known_member_is_returned() {
     assert_eq!(found, Some(MEMBER));
 }
 
-// DON'T: "keyleth" written twice; an edit to one silently passes
-#[test]
-fn roster_known_member_is_returned() {
-    let roster = Roster::new();
-
-    let found = roster.lookup("keyleth");
-
-    assert_eq!(found, Some("keyleth"));
-}
+// DON'T: written twice; an edit to one silently passes
+let found = roster.lookup("keyleth");
+assert_eq!(found, Some("keyleth"));
 ```
 
-`const` where the type allows it, `let` otherwise. Derived expectations may be
-computed in `Arrange` from the same constant:
+A value used **once** stays inline. Hoisting it just makes the reader jump to
+the top of the test to learn what the call actually receives.
 
 ```rust
-// Arrange
-const NAMES: [&str; 3] = ["vex", "vax", "percy"];
-let expected_len = NAMES.len();
+// DO
+assert!(roster.lookup("scanlan").is_none());
+
+// DON'T: a name and a lookup, to say "scanlan" one time
+const UNKNOWN_MEMBER: &str = "scanlan";
+assert!(roster.lookup(UNKNOWN_MEMBER).is_none());
 ```
+
+Same test for derived values: compute an expectation in `Arrange` only when it
+is genuinely reused or when the derivation itself is the point. Otherwise put
+the expression in the assertion.
+
+Use `const` where the type allows it, `let` otherwise.
 
 ## TS-5: Custom panic messages when the reason is not obvious
 
@@ -147,53 +152,43 @@ its own Act and Assert inside its own block (SC-3).
 
 ```rust
 #[test]
-fn lookup_various_inputs_returns_matching_member() {
+fn lookup_returns_member_only_on_exact_match() {
     // Arrange
     let roster = Roster::new();
 
     // Case: empty query
     {
-        // Act
-        let found = roster.lookup("");
-
-        // Assert
-        assert!(found.is_none());
+        assert!(roster.lookup("").is_none());
     }
 
     // Case: exact match
     {
-        // Arrange
         const MEMBER: &str = "vex";
 
-        // Act
-        let found = roster.lookup(MEMBER);
-
-        // Assert
-        assert_eq!(found, Some(MEMBER));
+        assert_eq!(roster.lookup(MEMBER), Some(MEMBER));
     }
 
     // Case: unknown member
     {
-        // Act
-        let found = roster.lookup("scanlan");
-
-        // Assert
-        assert!(found.is_none());
+        assert!(roster.lookup("scanlan").is_none());
     }
 }
 ```
 
-Note the case-local `Arrange` in the second block: values used by one case are
-declared in that case, per TS-4.
+`// Case:` is the only label these blocks need; each phase here is one line, so
+TS-3's labels would be noise. The case-local `const` in the second block is
+there because that case uses the value twice (TS-4).
 
 The cost of coalescing is that the first failing case aborts the rest. Coalesce
 when the cases are variations on one behavior; keep them separate when each case
 is a distinct behavior you want reported independently.
 
-## TS-7: Split a namespace group past three tests
+## TS-7: Split a namespace group once it gets big
 
-Once a `namespace_*` group exceeds three functions, move it into its own `mod`
-or file so the prefix can be dropped (TS-2).
+Once a `namespace_*` group passes about four functions, move it into its own
+`mod` or file so the prefix can be dropped (TS-2). Do this when you are already
+restructuring that group. Adding one test to an existing module is not a reason
+to reorganize and rename the tests around it.
 
 ```rust
 // DO
@@ -225,21 +220,27 @@ mod tests {
 functions that share a subject. Apply TS-6 within a group, TS-7 across groups:
 they never contend for the same edit.
 
-## TS-8: Vox Machina names for arbitrary data
+## TS-8: Vox Machina names for pure placeholders
 
-Use `vex`, `vax`, `percy`, `keyleth`, `grog`, `pike`, `scanlan` for genuinely
-arbitrary dummy values, instead of `foo`/`bar`/`alice`/`bob`.
+The trigger is narrow. Ask: *would I otherwise have written `foo`, `bar`,
+`alice`, or `bob` here?* If yes, write `vex`, `vax`, `percy`, `keyleth`, `grog`,
+`pike`, or `scanlan` instead. If no, TS-8 does not apply.
+
+A value that models a real thing in the domain is not a placeholder, even when
+the specific value is invented for the test. Sites, hostnames, regions, tenants,
+SKUs, and paths all read as real data to whoever comes next, and a fantasy name
+there is a puzzle, not a joke. Existing codebase convention beats both.
 
 ```rust
-// DO
-const MEMBER: &str = "keyleth";
+// DO: reads like a site this system could actually have
+const SITE: &str = "us-east-2b";
 
-// DON'T
-const MEMBER: &str = "foo";
+// DON'T: nobody will know whether "vox" is a real site name
+const SITE: &str = "vox";
 ```
 
-The rule covers *arbitrary* data only. When a value carries meaning the test
-depends on, name it for that meaning:
+Naming still beats theming: if a value carries meaning the test depends on, name
+the binding for that meaning.
 
 ```rust
 // DO: the leading space is the point of the test

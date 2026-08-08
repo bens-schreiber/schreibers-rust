@@ -1,7 +1,7 @@
 # Idioms
 
-Rules `ID-1` … `ID-12`. The through-line: **make the reader's job easy at the
-call site, not just at the definition.**
+Rules `ID-1` … `ID-11`. The through-line:
+**make the reader's job easy at the call site, not just at the definition.**
 
 ## ID-1: Enums, not boolean flags
 
@@ -25,32 +25,36 @@ fn normalize(src: &str, lowercase: bool) -> String { /* ... */ }
 normalize(input, true);
 ```
 
-This extends to struct fields and return types. Two related bools are almost
-always one enum with three or four variants, and the enum makes the impossible
-combination unrepresentable.
+This extends to struct fields and return types. Two bools whose combination has
+an impossible state are one enum, which makes that state unrepresentable.
+Independent flags (`verbose` and `dry_run`) stay separate bools: collapsing them
+gives you a four-variant cartesian enum and breaks the `serde` / `clap` derives.
 
-## ID-2: No `.unwrap()` / `.expect()` outside tests
+## ID-2: Don't panic outside tests
 
 Handle the error path: propagate with `?`, or destructure with `let ... else`
 (ID-4). Test code is exempt: a panic there is a failed assertion.
 
-When a panic is genuinely unreachable, justify it inline with a `// PANIC:`
-comment stating *why* it cannot fire.
+When a panic is genuinely unreachable, say why in an `.expect()` message. Never
+a bare `.unwrap()`, and never a `// PANIC:` comment: a comment is invisible in
+the log that will eventually carry the panic.
 
 ```rust
 // DO
-// PANIC: parsed from a literal above, cannot fail.
-let n = "42".parse::<u32>().unwrap();
+let n = "42".parse::<u32>().expect("parsed from a literal above, cannot fail");
 
 // DO: the ordinary path
 let Some(cfg) = load_config() else {
     return Err(Error::MissingConfig);
 };
+
+// DON'T: the reason is not in the backtrace
+// PANIC: parsed from a literal above, cannot fail.
+let n = "42".parse::<u32>().unwrap();
 ```
 
 Reserve `// SAFETY:` for `unsafe` blocks, where it is the language's own
-convention and what clippy's `undocumented_unsafe_blocks` looks for. Using it on
-a safe `unwrap` overloads a term that already means something specific.
+convention and what clippy's `undocumented_unsafe_blocks` looks for.
 
 ## ID-3: Implement the standard traits
 
@@ -84,8 +88,10 @@ impl Config {
 }
 ```
 
-Implement `From`, never `Into`: the blanket impl gives you `Into` for free, and
-implementing `Into` directly forfeits the reverse.
+Implement `From`, not `Into`: the blanket impl gives you `Into` for free, and
+implementing `Into` directly forfeits the reverse. `Into` as a *generic bound*
+(`name: impl Into<String>`) is a different thing and is often the better
+signature.
 
 `Display` gives you `.to_string()` through the blanket `ToString` impl, so
 implementing `ToString` by hand is always wrong.
@@ -128,23 +134,7 @@ fn load(path: &Path) -> Result<Config, Error> {
 }
 ```
 
-## ID-5: `matches!` for a bool
-
-```rust
-// DO
-let is_terminal = matches!(state, State::Done | State::Failed);
-
-// DON'T
-let is_terminal = match state {
-    State::Done | State::Failed => true,
-    _ => false,
-};
-```
-
-Once an arm needs to produce anything other than `true`/`false`, it is a `match`
-again.
-
-## ID-6: Name the local after the field
+## ID-5: Name the local after the field
 
 Then use field-init shorthand.
 
@@ -162,7 +152,7 @@ let the_age = row.get("age")?;
 Person { name: person_name, age: the_age }
 ```
 
-## ID-7: Pattern matching over field access
+## ID-6: Pattern matching over field access
 
 Destructure when it makes the control flow more explicit.
 
@@ -187,7 +177,11 @@ if event.kind == Kind::Click {
 A destructuring `match` is exhaustive: add a variant and the compiler finds every
 site. A chain of field comparisons silently keeps compiling.
 
-## ID-8: Import grouping
+When the only thing you want out of the pattern is a `bool`, that is `matches!`
+(`let is_terminal = matches!(state, State::Done | State::Failed);`). Once an arm
+has to produce anything else, it is a `match` again.
+
+## ID-7: Import grouping
 
 Three blocks, blank-line separated, widest scope to narrowest:
 
@@ -224,30 +218,19 @@ use std::ops::Not;
 
 ### Working with rustfmt
 
-This is exactly `rustfmt`'s `group_imports = "StdExternalCrate"`, so let the
-formatter do it:
+`group_imports = "StdExternalCrate"` does exactly this, but is nightly-only:
+it needs `cargo +nightly fmt`, and stable ignores it silently, so on stable the
+grouping is by hand. `reorder_imports` is stable and on by default, so the
+alphabetization within each block is free on either toolchain.
 
-```toml
-# rustfmt.toml
-group_imports = "StdExternalCrate"
-```
-
-That option is nightly-only, so it needs `cargo +nightly fmt` to take effect.
-On stable it is ignored (no error, the grouping just goes unenforced), so
-apply ID-8 by hand there.
-
-`reorder_imports` is stable and on by default. It alphabetizes *within* each
-blank-line-separated block without merging blocks, which keeps ID-8's
-alphabetization free on either toolchain.
-
-## ID-9: `std::ops::Not` over prefix `!`
+## ID-8: `std::ops::Not` over prefix `!`
 
 A leading `!` is one glyph attached to something long; it is easy to miss and
 forces parentheses. `.not()` reads in the same direction as the rest of the
 chain.
 
-Use `.not()` when the negation wraps a call, a macro, or a parenthesized
-expression:
+Use `.not()` when you are continuing the chain afterward, or negating a
+`matches!`. It needs `use std::ops::Not;` in the file.
 
 ```rust
 // DO
@@ -255,32 +238,34 @@ use std::ops::Not;
 
 is_epic.not().then(|| render());
 matches!(state, State::Done).not()
-name.is_empty().not()
 
 // DON'T
 (!is_epic).then(|| render());
 !matches!(state, State::Done)
-!name.is_empty()
 ```
 
-Keep prefix `!` for a bare identifier in a plain condition, where there is
-nothing to lose track of:
+Keep prefix `!` in condition position, where the `if` already frames it:
 
 ```rust
+// DO
 if !ready {
     return;
 }
+
+if !name.is_empty() { /* ... */ }
+
+// DON'T: nothing gained, and the negation is now at the far end of the line
+if name.is_empty().not() { /* ... */ }
 ```
 
-## ID-10: Alphabetize `Cargo.toml`
+## ID-9: Alphabetize `Cargo.toml`
 
 Every list stays alphabetized: `[dependencies]`, `[dev-dependencies]`,
 `[build-dependencies]`, `[features]` (and the crates within each feature's
 list), and `workspace.members`.
 
-Why: an alphabetized list makes "is X already here?" a lookup instead of a scan,
-and it removes an entire class of merge conflict: two branches adding
-dependencies land in different places instead of both at the end.
+Why: it makes "is X already here?" a lookup instead of a scan, and stops two
+branches from both appending at the end.
 
 ```toml
 # DO
@@ -299,10 +284,11 @@ logos = "0.14"
 Section order itself follows Cargo convention (`[package]`, `[dependencies]`,
 `[dev-dependencies]`, …), not alphabetical.
 
-## ID-11: Type-hint on the RHS, via turbofish
+## ID-10: Keep compound generic types off the LHS
 
-When a call's return type needs a hint, put it on the call with `::<...>`, not
-on the binding.
+The thing to avoid is a container type sprawling across the left of a `let`,
+where it pushes the name away from the reader. When a call's return type needs a
+hint, prefer the turbofish.
 
 ```rust
 // DO
@@ -312,31 +298,23 @@ let names = names_iter.collect::<Vec<_>>();
 let names: Vec<_> = names_iter.collect();
 ```
 
-The LHS states a *name*; the RHS states an *expression*, and the hint is a fact
-about that expression, not the binding. Keeping it on the RHS also means the
-hint travels with the call if the result is later returned or passed inline
-instead of bound at all, and it keeps every binding in the function shaped the
-same way (`let x = ...;`) so the reader scans names on the left without
-detouring through types.
+The hint is a fact about the expression, not the binding, and on the RHS it
+travels with the call if the result is later returned or passed inline.
 
-## ID-12: Infer with `_` wherever the compiler can
+Annotated on the LHS is fine, and sometimes required: `const` / `static` /
+signatures, plain scalars (`let count: usize = ...`), and expressions with no
+turbofish to hang a hint on (`.into()`, struct-literal fields). Judgement call.
 
-Once one part of a type is pinned down elsewhere, an explicit repeat of the
-rest is noise. Write `_` for any parameter the compiler can recover from
-context.
+## ID-11: Infer with `_` wherever the compiler can
+
+Supply only the part the compiler actually needs (`Vec` over `HashSet`,
+`HashMap` over `BTreeMap`) and leave the rest to inference. If it can't infer,
+it will say so, and that error names the one parameter to spell out.
 
 ```rust
 // DO
-let names = names_iter.collect::<Vec<_>>();
 let cache = HashMap::<_, _>::new();
 
 // DON'T
-let names = names_iter.collect::<Vec<String>>();
 let cache = HashMap::<String, Vec<u8>>::new();
 ```
-
-This pairs with ID-11: the turbofish supplies only the piece of information the
-compiler actually needs (`Vec` over, say, `HashSet`; `HashMap` over `BTreeMap`),
-and `_` leaves every parameter to inference instead of restating what the rest
-of the line already fixes. If the compiler can't infer it, it will say so, and
-that error is the signal to spell out that one parameter, not the whole type.

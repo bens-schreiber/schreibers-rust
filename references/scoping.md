@@ -11,6 +11,11 @@ block expression rather than letting it leak to the function's top level.
 Why: top-level bindings that are dead after one use make it impossible to tell,
 at a glance, which names still matter for the rest of the function.
 
+Scope: multi-line intermediates. A two-line prelude to a return is fine as-is,
+and a method chain or an extracted `fn` is often the better fix. A block also
+cannot return a borrow of something bound inside it, so it does not always
+compile.
+
 ```rust
 // DO: a and b cannot be confused for state the rest of the function reads
 let total = {
@@ -28,21 +33,9 @@ let total = base + tax;
 ## SC-2: Top level is for values read from multiple scopes
 
 The exception to SC-1. A local earns its place at the function's top level when
-two or more later scopes genuinely read it. Note that the *computation* still
-gets a block; only the result escapes.
-
-```rust
-// DO: total is read twice, far apart, so it belongs at the top level
-let total = {
-    let base = order.subtotal();
-    let tax = base * TAX_RATE;
-    base + tax
-};
-
-// ...many lines later...
-let rounded = total.round();
-log_receipt(total);
-```
+two or more later scopes genuinely read it. The *computation* still gets a
+block; only the result escapes, exactly as in SC-1's DO above, the difference
+being that `total` is read twice.
 
 Read from exactly one later scope? That is SC-1: push it in.
 
@@ -54,6 +47,9 @@ does.
 
 Why: a blank line does not tell the reader "the locals above are irrelevant
 below." A block does, and the compiler enforces it.
+
+For units of several lines each. Blocking off every pair of statements is worse
+than no blocks at all.
 
 ```rust
 // DO
@@ -77,7 +73,10 @@ two names for the same concept.
 
 ## SC-4: Nest a helper at its only call site
 
-If `bar` is only ever called from inside `foo`, it lives inside `foo`.
+If `bar` is only ever called from inside `foo`, and it is short, it lives inside
+`foo`. Keep it at module scope when it needs a unit test or a doctest of its own
+(a nested `fn` is unreachable from `mod tests`), or when it is long enough that
+nesting it buries the caller's own logic.
 
 ```rust
 // DO: parse_row exists for load_manifest and nowhere else
@@ -130,6 +129,9 @@ The one deliberate exception to SC-1: a closure goes at the top of the
 function body, before the code that uses it, even when SC-1 would otherwise
 push it down to just above its first use. The reader should meet the
 vocabulary before the prose.
+
+Not when hoisting would extend a mutable capture across code that needs the same
+borrow: that is an E0502, and the closure goes just above its first use instead.
 
 ```rust
 // DO
