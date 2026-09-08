@@ -453,6 +453,42 @@ for user in users
 }
 ```
 
+### ID-13: explain non-obvious control-flow exits at the exit
+
+When the reason for a `continue`, `break`, or early `return` is non-trivial,
+place a comment explaining why immediately above the exit statement, inside the
+branch. Do not place it outside the branch or merely restate the condition.
+
+```rust
+// DO
+if record.version < minimum_version {
+    // Older records cannot contain the fields required below.
+    continue;
+}
+
+if retries == retry_limit {
+    // Further attempts would exceed the upstream request deadline.
+    break;
+}
+
+if cache.is_fresh() {
+    // Refreshing would discard locally validated metadata.
+    return Ok(cache);
+}
+
+// DON'T: the explanation is outside the branch.
+// Older records cannot contain the fields required below.
+if record.version < minimum_version {
+    continue;
+}
+
+// DON'T: the comment merely restates the condition.
+if record.version < minimum_version {
+    // Skip old records.
+    continue;
+}
+```
+
 ## Tests
 
 ### TS-1: unit tests live in the file under test

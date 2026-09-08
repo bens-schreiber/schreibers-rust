@@ -147,6 +147,7 @@ fn settings_document_parses_to_its_entries() {
 | ID-10 | Compound generics off the LHS: `.collect::<Vec<_>>()`, not `let names: Vec<_> =`. Scalars, `const`/`static`, signatures, and expressions with no turbofish stay LHS-annotated. |
 | ID-11 | `_` for any generic parameter the compiler can infer. |
 | ID-12 | Name complex `for` iterables. When a `for` loop's iterable contains non-trivial filtering, mapping, or closure logic, bind it to an aptly named local first. This is an exception to SC-1. |
+| ID-13 | Explain non-obvious control-flow exits at the exit. When the reason for a `continue`, `break`, or early `return` is non-trivial, place a comment explaining why immediately above the exit statement, inside the branch. Do not place it outside the branch or merely restate the condition. |
 
 ## Tests
 
