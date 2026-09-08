@@ -429,6 +429,30 @@ let ids = raw.split(',').map(str::parse).collect::<Result<Vec<_>, _>>()?;
 let ids = raw.split(',').map(str::parse).collect::<Result<Vec<u32>, ParseIntError>>()?;
 ```
 
+### ID-12: name complex `for` iterables
+
+When a `for` loop's iterable contains non-trivial filtering, mapping, or closure
+logic, bind it to an aptly named local first. This is an exception to SC-1.
+
+```rust
+// DO
+let eligible_users = users
+    .iter()
+    .filter(|user| user.is_active() && user.has_access());
+
+for user in eligible_users {
+    // ...
+}
+
+// DON'T
+for user in users
+    .iter()
+    .filter(|user| user.is_active() && user.has_access())
+{
+    // ...
+}
+```
+
 ## Tests
 
 ### TS-1: unit tests live in the file under test
