@@ -120,6 +120,12 @@ fn settings_document_parses_to_its_entries() {
 | SC-5 | Closures go at the top of the function body: the one exception to SC-1. Not when hoisting would extend a mutable capture across code needing the same borrow. |
 | SC-6 | No divider comments (`// ------`, `// ==== FOO ====`). Use a `{}` block inside a function, a `mod` or separate file outside one. |
 
+## Formatting
+
+| ID | Rule |
+| --- | --- |
+| FMT-1 | Within a block, put one blank line after each direct-child statement ending in `}` or `};` when another independent statement follows. Do not separate joined `if`/`else if`/`else` branches or individual `match` arms. |
+
 ## Modules and structs
 
 | ID | Rule |

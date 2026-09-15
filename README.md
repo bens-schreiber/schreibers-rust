@@ -15,6 +15,14 @@ It sits on top of `rustfmt` and `clippy` defaults.
 The `SKILL.md` file and `references/rules.md` contain rules intended to be read
 by agents. Here is a summary of the rules for humans:
 
+## Formatting
+
+### FMT-1: blank line after a block-ending statement
+
+Within a block, separate a direct-child statement ending in `}` or `};` from the
+next independent statement. Joined `if` branches and individual `match` arms
+stay together.
+
 ## Scoping
 
 ### SC-1: bind at the read count
@@ -785,4 +793,3 @@ semicolon, or parentheses.
 // DON'T
 /// Rows are compared by name — two rows with the same name are equal.
 ```
-

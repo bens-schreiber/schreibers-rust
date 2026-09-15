@@ -4,6 +4,40 @@ Elaboration on `SKILL.md`. Only rules whose shape needs more than a table row
 appear here; the rest are complete as written. SC-1, SC-2, TS-3 and TS-6 carry
 their DO/DON'T in `SKILL.md` itself and are not repeated.
 
+## FMT-1: separate block-ending statements
+
+```rust
+// DO
+for item in items {
+    process(item);
+}
+
+let result = {
+    prepare();
+    finish()
+};
+
+report(result);
+
+// DO: these constructs are joined
+if ready {
+    start();
+} else {
+    wait();
+}
+
+match state {
+    State::Ready => start(),
+    State::Waiting => wait(),
+}
+
+// DON'T: independent sibling statements touch
+for item in items {
+    process(item);
+}
+report(items);
+```
+
 ## SC-1: the block-expression fix
 
 The chain is first choice (see `SKILL.md`). Reach for a block when the
