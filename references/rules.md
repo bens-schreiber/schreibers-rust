@@ -180,6 +180,66 @@ state across calls, whereas an `escape` cluster that only transforms arguments
 is a `mod` of free functions. Files follow the components, so
 `src/formatter/comments.rs` holds `CommentCtx` and its `impl` together.
 
+## MS-7: most public first in every module
+
+Apply this ordering independently to the crate root and every file-backed,
+inline, or nested module:
+
+1. Inner module documentation (`//!`)
+2. Imports and re-exports
+3. Macro definitions
+4. Constants and statics
+5. `pub` items
+6. `pub(crate)` items
+7. `pub(super)` items
+8. `pub(in ...)` items
+9. Private items
+
+Apply the same visibility tiers within inherent `impl` blocks, and place the
+whole `impl` at the tier of its most-visible method. Module-level `//!` comments
+always go at the top of their module, before imports and every other item. Keep
+outer documentation and attributes attached to the item they describe. Trait
+implementation methods have no independent visibility, so this rule does not
+reorder them.
+
+Visibility outranks declaration and composition order. A visible item stays
+above a less-visible helper it calls. Within one visibility tier, use the order
+that best explains the code.
+
+```rust
+mod client {
+    //! Connects to the service.
+
+    use crate::Error;
+
+    macro_rules! invalid {
+        () => { Error::Invalid };
+    }
+
+    const MAX_RETRIES: usize = 3;
+
+    pub struct Client;
+
+    impl Client {
+        pub fn connect(&self) -> Result<(), Error> {
+            validate_endpoint()
+        }
+
+        pub(crate) fn reset(&mut self) { /* ... */ }
+
+        fn retry(&self) { /* ... */ }
+    }
+
+    pub(crate) fn default_client() -> Client { /* ... */ }
+
+    pub(super) fn shared_client() -> Client { /* ... */ }
+
+    pub(in crate::network) fn network_client() -> Client { /* ... */ }
+
+    fn validate_endpoint() -> Result<(), Error> { /* ... */ }
+}
+```
+
 ## ID-2: the reason goes in the panic message
 
 ```rust
