@@ -244,10 +244,12 @@ impl Editor {
 ### MS-7: most public first in every module
 
 Apply the same order independently in crate roots and every file-backed,
-inline, or nested module: `//!` module docs, imports and re-exports, macros,
-constants and statics, `pub`, `pub(crate)`, `pub(super)`, `pub(in ...)`, then
-private items. Apply the visibility tiers to inherent methods too. Visibility
-outranks declaration and composition order.
+inline, or nested module: `//!` module docs, external module declarations
+(`mod foo;`), imports and re-exports, macros, constants and statics, `pub`,
+`pub(crate)`, `pub(super)`, `pub(in ...)`, then private items. External module
+declarations come before imports regardless of visibility; inline modules
+(`mod foo { ... }`) stay in their visibility tier. Apply the visibility tiers
+to inherent methods too. Visibility outranks declaration and composition order.
 
 ## Idioms
 

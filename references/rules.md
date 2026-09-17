@@ -186,14 +186,19 @@ Apply this ordering independently to the crate root and every file-backed,
 inline, or nested module:
 
 1. Inner module documentation (`//!`)
-2. Imports and re-exports
-3. Macro definitions
-4. Constants and statics
-5. `pub` items
-6. `pub(crate)` items
-7. `pub(super)` items
-8. `pub(in ...)` items
-9. Private items
+2. External module declarations (`mod foo;`), regardless of visibility
+3. Imports and re-exports
+4. Macro definitions
+5. Constants and statics
+6. `pub` items
+7. `pub(crate)` items
+8. `pub(super)` items
+9. `pub(in ...)` items
+10. Private items
+
+An external module declaration has no body in the current file, such as
+`mod client;` or `pub(crate) mod protocol;`. An inline module such as
+`mod client { ... }` remains in its visibility tier.
 
 Apply the same visibility tiers within inherent `impl` blocks, and place the
 whole `impl` at the tier of its most-visible method. Module-level `//!` comments
@@ -202,13 +207,17 @@ outer documentation and attributes attached to the item they describe. Trait
 implementation methods have no independent visibility, so this rule does not
 reorder them.
 
-Visibility outranks declaration and composition order. A visible item stays
-above a less-visible helper it calls. Within one visibility tier, use the order
-that best explains the code.
+Visibility outranks declaration and composition order except for external
+module declarations, which always precede imports. A visible item stays above a
+less-visible helper it calls. Within one visibility tier, use the order that
+best explains the code.
 
 ```rust
 mod client {
     //! Connects to the service.
+
+    mod protocol;
+    pub(crate) mod transport;
 
     use crate::Error;
 
@@ -237,6 +246,10 @@ mod client {
     pub(in crate::network) fn network_client() -> Client { /* ... */ }
 
     fn validate_endpoint() -> Result<(), Error> { /* ... */ }
+
+    mod tests {
+        // Inline and private, so it remains with private items.
+    }
 }
 ```
 

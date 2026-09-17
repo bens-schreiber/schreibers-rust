@@ -136,7 +136,7 @@ fn settings_document_parses_to_its_entries() {
 | MS-4 | A `mod` of free functions, not a zero-field struct that only namespaces an `impl`. |
 | MS-5 | A struct with a real `impl`, not a `mod`, once the same non-trivial parameters thread through several functions. |
 | MS-6 | Count the methods in an `impl` that serve one feature rather than the type's main job. **Three or more:** that cluster is its own component, by MS-4 or MS-5. Extracting is the fix, not more `impl` blocks on the same type. No honest seam is itself the finding, and outranks any line count. |
-| MS-7 | In every module body, file-backed or inline, order items: `//!` module docs, imports/re-exports, macros, constants/statics, `pub`, `pub(crate)`, `pub(super)`, `pub(in ...)`, then private items. Apply the visibility tiers to inherent methods too. This order outranks declaration and composition order; keep attributes and outer docs attached to their item. |
+| MS-7 | In every module body, file-backed or inline, order items: `//!` module docs, external module declarations (`mod foo;`), imports/re-exports, macros, constants/statics, `pub`, `pub(crate)`, `pub(super)`, `pub(in ...)`, then private items. External module declarations come before imports regardless of visibility; inline modules (`mod foo { ... }`) stay in their visibility tier. Apply the visibility tiers to inherent methods too. This order outranks declaration and composition order; keep attributes and outer docs attached to their item. |
 
 ## Idioms
 
