@@ -155,6 +155,7 @@ fn settings_document_parses_to_its_entries() {
 | ID-11 | `_` for any generic parameter the compiler can infer. |
 | ID-12 | Name complex `for` iterables. When a `for` loop's iterable contains non-trivial filtering, mapping, or closure logic, bind it to an aptly named local first. This is an exception to SC-1. |
 | ID-13 | Explain non-obvious control-flow exits at the exit. When the reason for a `continue`, `break`, or early `return` is non-trivial, place a comment explaining why immediately above the exit statement, inside the branch. Do not place it outside the branch or merely restate the condition. |
+| ID-14 | No large iterator-adaptor closures. A closure body with six or more nonblank lines becomes a `for` loop.  |
 
 ## Tests
 
@@ -173,12 +174,13 @@ fn settings_document_parses_to_its_entries() {
 
 | ID | Rule |
 | --- | --- |
-| DOC-1 | Markdown and line breaks in doc comments: one-line summary, blank `///`, then paragraphs, `#` headings, bullets. Indent bullet continuations under the bullet's *text* or rustdoc drops them from the list. |
+| DOC-1 | Structure documentation and explanatory comments with line breaks. Rustdoc gets a one-line summary, blank `///`, then short paragraphs, `#` headings, and bullets. In all comments, separate distinct thoughts with a blank comment line instead of building one large paragraph. Indent bullet continuations under the bullet's *text* or rustdoc drops them from the list. |
 | DOC-2 | Blank line between a documented field and the undocumented fields below it. |
 | DOC-3 | `//!` header on every crate and non-obvious module, above the imports: purpose, public API, design quirks. |
 | DOC-4 | Do not document what the name says. If a name needs a comment to be understood, rename it. |
 | DOC-5 | `# Safety`, `# Panics`, `# Errors`, `# Examples` for their conventional meanings only. Anything else gets your own heading. |
 | DOC-6 | Never an em dash, in doc comments, comments, or commit messages. Use a period, comma, colon, semicolon, or parentheses. |
+| DOC-7 | Always use bullets when documentation or an explanatory comment enumerates distinct responsibilities, behaviors, or conditions. Do not hide a list in commas or a run-on sentence. Commas remain fine in ordinary prose. |
 
 ## Before you call it done
 
