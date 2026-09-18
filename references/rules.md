@@ -380,6 +380,58 @@ In condition position the `if` already frames the negation, so prefix `!` stays:
 `if !ready` is right and `if ready.not()` puts the negation at the far end of the
 line.
 
+## ID-14: no large iterator-adaptor closures
+
+Count the nonblank lines in the closure body passed to `.map()`, `.filter()`,
+`.filter_map()`, or another iterator adaptor. At six or more, use a `for` loop.
+
+```rust
+// DO: normalization has another genuine caller.
+fn normalize_name(name: &str) -> String {
+    name.trim().to_lowercase()
+}
+
+let names = raw_names
+    .iter()
+    .copied()
+    .map(normalize_name)
+    .collect::<Vec<_>>();
+let owner = normalize_name(raw_owner);
+
+// DO: single-use logic stays local without filling an adaptor closure.
+let mut records = Vec::new();
+for row in rows {
+    let fields = row.split(',').collect::<Vec<_>>();
+    if fields.len() != EXPECTED_FIELDS {
+        return Err(Error::WrongFieldCount);
+    }
+
+    records.push(Record {
+        id: fields[0].parse()?,
+        name: fields[1].to_owned(),
+    });
+}
+
+// DON'T: a single-use miniature function body hidden inside the chain.
+let records = rows
+    .iter()
+    .map(|row| {
+        let fields = row.split(',').collect::<Vec<_>>();
+        if fields.len() != EXPECTED_FIELDS {
+            return Err(Error::WrongFieldCount);
+        }
+
+        let id = fields[0].parse()?;
+        let name = fields[1].to_owned();
+        Ok(Record { id, name })
+    })
+    .collect::<Result<Vec<_>, Error>>()?;
+```
+
+Do not extract a single-use helper merely to keep the iterator chain: this rule
+is more specific than SC-3. ID-12 still governs the iterable when the replacement
+loop itself contains non-trivial filtering, mapping, or closure logic.
+
 ## TS-2: names
 
 ```rust
@@ -540,9 +592,11 @@ pub struct Entry {
 ```
 
 The first line is the rustdoc summary in index and search results: keep it to one
-sentence that stands on its own. Bullet continuations indent to sit under the
-bullet's *text*, not the marker; the misaligned form is parsed as a new paragraph
-and drops out of the list.
+sentence that stands on its own. In doc comments and explanatory comments, keep
+later paragraphs short and put a blank comment line between distinct thoughts
+rather than packing them into one large paragraph. Bullet continuations indent
+to sit under the bullet's *text*, not the marker; the misaligned form is parsed
+as a new paragraph and drops out of the list.
 
 The blank line before `line` is DOC-2. Without it, the reader cannot tell whether
 the comment on `name` covers the two fields below it.
@@ -608,4 +662,26 @@ something untrue. For anything else, write your own heading.
 
 // DON'T
 /// Entries are interned — two entries with the same name share storage.
+```
+
+## DOC-7: lists look like lists
+
+Always use bullets when documentation or an explanatory comment enumerates
+distinct responsibilities, behaviors, or conditions. Do not hide the list in
+commas or a run-on sentence. Commas remain fine in ordinary prose.
+
+```rust
+// DO
+// Responsible for:
+// - Parsing each record.
+// - Validating its fields.
+// - Writing it to storage.
+//
+// Under these conditions:
+// - The input has passed schema validation.
+// - The destination is writable.
+
+// DON'T
+// Responsible for parsing each record, validating its fields, and writing it to
+// storage, as long as the input is valid and the destination is writable.
 ```
