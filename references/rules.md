@@ -1,8 +1,8 @@
 # Worked examples
 
 Elaboration on `SKILL.md`. Only rules whose shape needs more than a table row
-appear here; the rest are complete as written. SC-1, SC-2, TS-3 and TS-6 carry
-their DO/DON'T in `SKILL.md` itself and are not repeated.
+appear here; the rest are complete as written. SC-1 carries its own DO/DON'T in
+`SKILL.md` and is elaborated rather than repeated.
 
 ## FMT-1: separate block-ending statements
 
@@ -56,7 +56,7 @@ let base = order.subtotal();
 let total = base + base * TAX_RATE;
 ```
 
-### The two exceptions
+### When to leave the binding alone
 
 A short prelude to the function's tail expression stays flat. Wrapping the whole
 body in a block re-indents everything and buys nothing:
@@ -82,6 +82,37 @@ let code = u32::from_str_radix(&digits, 16).expect("four hex digits fit in a u32
 char::from_u32(code).ok_or(Error::InvalidUnicodeEscape { offset })
 ```
 
+A long derivation also stays bound when its *name* is the only thing that says
+what the chain computes. Several adapters inlined into a call argument make the
+reader run the chain in their head to learn the result:
+
+```rust
+// DO: one read, and the name is the whole explanation
+let stale_sessions = sessions
+    .iter()
+    .filter(|session| session.last_seen < cutoff)
+    .filter(|session| session.pending_writes.is_empty())
+    .count();
+
+report.record(stale_sessions);
+
+// DON'T: four lines of mechanism in an argument, with no statement of intent
+report.record(
+    sessions
+        .iter()
+        .filter(|session| session.last_seen < cutoff)
+        .filter(|session| session.pending_writes.is_empty())
+        .count(),
+);
+```
+
+This does not reopen SC-1 for short chains. `let count = names.len();` read once
+is still the rule's central case: the name restates the call and buys nothing.
+
+These are the cases that come up most, not a closed list. The test is always the
+same: does the name buy the reader more than the extra line of state costs them?
+Where it does, keep it.
+
 ## SC-2: what the block buys you
 
 ```rust
@@ -101,7 +132,22 @@ char::from_u32(code).ok_or(Error::InvalidUnicodeEscape { offset })
 ```
 
 Both blocks bind `total` and neither leaks. Without the braces you would need
-two names for the same concept.
+two names for the same concept, and the second binding would silently shadow the
+first:
+
+```rust
+// DO
+// Case: object
+{
+    let value = parse("{}");
+    assert_eq!(value, Ok(Value::Object(Vec::new())));
+}
+
+// DON'T: no braces, so the next `value` silently shadows this one
+// Case: object
+let value = parse("{}");
+assert_eq!(value, Ok(Value::Object(Vec::new())));
+```
 
 ## SC-3: nest a helper at its only call site
 
@@ -157,6 +203,12 @@ More `impl` blocks on the same type, in one file or several, still hand every
 method `&mut self` on the whole struct. Extract the cluster instead; the method
 prefixes it sheds (`comment_queue` to `queue`) confirm the seam.
 
+A shared prefix is a hint, never the trigger. Methods named for the type's main
+job (`parse_header`, `parse_body`, `parse_footer` on a `Parser`) are that job,
+not a side feature, and extracting them produces a component that has to borrow
+its way back into the original. If the extracted type would need the parent's
+data passed in, there was no seam.
+
 ```rust
 // DO: comment state is reachable only from the methods that own it
 struct CommentCtx {
@@ -189,43 +241,41 @@ inline, or nested module:
 2. External module declarations (`mod foo;`), regardless of visibility
 3. Imports and re-exports
 4. Macro definitions
-5. Constants and statics
-6. `pub` items
-7. `pub(crate)` items
-8. `pub(super)` items
-9. `pub(in ...)` items
-10. Private items
+5. Constants and statics, most public first
+6. Everything else, most public first: `pub`, `pub(crate)`, `pub(super)`,
+   `pub(in ...)`, private
 
 An external module declaration has no body in the current file, such as
 `mod client;` or `pub(crate) mod protocol;`. An inline module such as
 `mod client { ... }` remains in its visibility tier.
 
-Apply the same visibility tiers within inherent `impl` blocks, and place the
-whole `impl` at the tier of its most-visible method. Module-level `//!` comments
-always go at the top of their module, before imports and every other item. Keep
-outer documentation and attributes attached to the item they describe. Trait
-implementation methods have no independent visibility, so this rule does not
-reorder them.
+Types and traits go anywhere their visibility tier allows, so group them however
+explains the code best. Inherent `impl` blocks take the same tiers internally
+and sit at the tier of their most-visible method. Keep outer documentation and
+attributes attached to the item they describe.
 
-Visibility outranks declaration and composition order except for external
-module declarations, which always precede imports. A visible item stays above a
-less-visible helper it calls. Within one visibility tier, use the order that
-best explains the code.
+One exception outranks the order: `macro_rules!` is textually scoped, so a macro
+stays above any `mod` that uses it. Moving a `mod` above it stops compiling.
+
+Otherwise visibility outranks declaration and composition order, and a visible
+item stays above the less-visible helper it calls.
 
 ```rust
 mod client {
     //! Connects to the service.
+
+    // `protocol` expands `invalid!`, so the macro has to come first.
+    macro_rules! invalid {
+        () => { Error::Invalid };
+    }
 
     mod protocol;
     pub(crate) mod transport;
 
     use crate::Error;
 
-    macro_rules! invalid {
-        () => { Error::Invalid };
-    }
-
-    const MAX_RETRIES: usize = 3;
+    pub const MAX_RETRIES: usize = 3;
+    const BACKOFF_MS: u64 = 50;
 
     pub struct Client;
 
@@ -242,8 +292,6 @@ mod client {
     pub(crate) fn default_client() -> Client { /* ... */ }
 
     pub(super) fn shared_client() -> Client { /* ... */ }
-
-    pub(in crate::network) fn network_client() -> Client { /* ... */ }
 
     fn validate_endpoint() -> Result<(), Error> { /* ... */ }
 
@@ -285,6 +333,11 @@ clippy's `undocumented_unsafe_blocks` looks for. Do not spend it elsewhere.
 | `fn next_item(&mut self) -> Option<T>` | `Iterator` |
 
 Implementing `Into` directly forfeits the reverse; `From` gives you both.
+
+`FromStr` and `Iterator` are the two that will not always fit. Neither can yield
+a value that borrows from its input, so a zero-copy `fn parse(src: &str) ->
+Result<Token<'_>, E>` stays a plain function. Forcing the trait there buys an
+allocation you did not need.
 `Display` gives you `.to_string()` through the blanket `ToString` impl, so
 implementing `ToString` by hand is always wrong.
 
@@ -365,25 +418,35 @@ alphabetization within each block is free on either toolchain.
 ## ID-8: `.not()` over prefix `!`
 
 ```rust
-// DO
+// DO: expression position, where the negation would otherwise jump to the front
 use std::ops::Not;
 
 is_epic.not().then(|| render());
-matches!(state, State::Done).not()
+let stale = matches!(state, State::Done).not();
 
-// DON'T
+// DON'T: same expressions, negation stranded at the far left
 (!is_epic).then(|| render());
-!matches!(state, State::Done)
+let stale = !matches!(state, State::Done);
 ```
 
-In condition position the `if` already frames the negation, so prefix `!` stays:
-`if !ready` is right and `if ready.not()` puts the negation at the far end of the
-line.
+Condition position is the other way round. The `if` already frames the negation,
+so prefix `!` always wins there, `matches!` included:
+
+```rust
+// DO
+if !ready { wait(); }
+if !matches!(state, State::Done) { poll(); }
+
+// DON'T: the negation lands at the far end of the line
+if ready.not() { wait(); }
+```
 
 ## ID-14: no large iterator-adaptor closures
 
-Count the nonblank lines in the closure body passed to `.map()`, `.filter()`,
-`.filter_map()`, or another iterator adaptor. At six or more, use a `for` loop.
+A closure passed to `.map()`, `.filter()`, `.filter_map()` or another adaptor
+should read as one expression. Once the body needs statements, its own control
+flow, or an early exit, the chain has stopped being a chain: write the `for`
+loop. A body you have to scroll or indent past is already too big.
 
 ```rust
 // DO: normalization has another genuine caller.
@@ -445,21 +508,61 @@ fn tokenize_works()
 fn it_should_handle_the_case_where_the_string_is_not_terminated()
 ```
 
+## TS-3: when the labels go on
+
+Count the phases separately. A one-line Act against a ten-line Assert still gets
+all three labels. An Arrange living outside the body, such as a module-level
+`const` or a fixture `fn`, still counts as a phase: label the line that pulls it
+in, or where there is none, label the Act and Assert alone.
+
+```rust
+// DO: the Assert alone is over one line, so all three phases are labeled
+#[test]
+fn settings_document_parses_to_its_entries() {
+    // Arrange
+    let source = SETTINGS;
+
+    // Act
+    let value = parse(source).expect("SETTINGS is a valid document");
+
+    // Assert
+    assert_eq!(value["retries"], Value::Number(3.0));
+    assert_eq!(value["region"], Value::String("us-east-2b".into()));
+}
+
+// DON'T: every phase is one line, so the labels are three lines of nothing
+#[test]
+fn empty_document_parses_to_an_empty_object() {
+    // Arrange
+    let source = "{}";
+
+    // Act
+    let value = parse(source);
+
+    // Assert
+    assert_eq!(value, Ok(Value::Object(Vec::new())));
+}
+```
+
 ## TS-4: bind what repeats, inline what doesn't
 
 The reason to bind is **drift**: if a call and its assertion each spell out the
 same literal, an edit to one silently passes.
 
 ```rust
-// DO: "keyleth" is used twice, so it is bound once
+// DO: "keyleth" is spelled once, so the call and the assertion cannot drift
 const MEMBER: &str = "keyleth";
 
-let found = roster.lookup(MEMBER);
-assert_eq!(found, Some(MEMBER));
+assert_eq!(roster.lookup(MEMBER), Some(MEMBER));
 
-// DON'T: a name and a lookup, to say "scanlan" one time
+// DON'T: two literals to keep in sync, and an edit to one still passes
+assert_eq!(roster.lookup("keyleth"), Some("keyleth"));
+
+// DON'T: a name and a binding, to say "scanlan" one time
 const UNKNOWN_MEMBER: &str = "scanlan";
-assert!(roster.lookup(UNKNOWN_MEMBER).is_none());
+let found = roster.lookup(UNKNOWN_MEMBER);
+
+assert!(found.is_none());
 ```
 
 Same test for derived values: compute an expectation in Arrange only when it is
@@ -505,9 +608,10 @@ fn lookup_returns_member_only_on_exact_match() {
 }
 ```
 
-`// Case:` is the only label these blocks need; each phase here is one line, so
-TS-3's labels would be noise. The case-local `const` is there because that case
-uses the value twice (TS-4).
+The `// Arrange` label marks the hoisted fixture, which is the whole reason the
+cases live together. Inside the blocks every phase is one line, so TS-3 asks for
+no labels and `// Case:` is all they take. The case-local `const` is there
+because that case uses the value twice (TS-4).
 
 The cost of coalescing is that the first failing case aborts the rest. Coalesce
 when the cases are variations on one behavior; keep them separate when each is a
@@ -524,6 +628,8 @@ by the end of that pass.
 // DO: the mod supplies the namespace, so the names carry only input and outcome
 #[cfg(test)]
 mod parse_tests {
+    use super::*;
+
     #[test]
     fn plain_rows_split_on_commas_and_newlines() { /* ... */ }
 
@@ -561,47 +667,120 @@ have seen.
 // DO: reads like a site this system could actually have
 const SITE: &str = "us-east-2b";
 
-// DON'T: nobody will know whether "vox" is a real site name
-const SITE: &str = "vox";
+// DON'T: a placeholder says nothing about the shape of a real site
+const SITE: &str = "foo";
 ```
 
-Naming still beats theming: if a value carries meaning the test depends on, name
-the binding for that meaning. `const PADDED_NAME: &str = " grog";`, not
-`const VAX: &str = " grog";`.
-
-## DOC-1: structure, and the bullet-continuation trap
+Name the binding for the property the test depends on, not for the value it
+happens to hold:
 
 ```rust
-/// A single parsed manifest entry.
-///
-/// Entries are interned, so two entries with the same name share storage and
-/// comparison is pointer-equality.
-///
-/// # Interning caveats
-///
-/// - The intern table is per-`Parser`, so entries from two parsers must be
-///   compared by name.
-///   Comparing them by pointer silently returns `false`.
-pub struct Entry {
-    /// Interned; unique within a single parser.
-    pub name: Symbol,
+// DO: the name says why this value is in the test
+const PADDED_USERNAME: &str = "  hgrant";
 
-    pub line: u32,
-    pub column: u32,
+// DON'T: the name restates the value and hides what is being exercised
+const HGRANT: &str = "  hgrant";
+```
+
+## TS-9: assert on the type, not the rendered string
+
+A test that rebuilds the message with the same `format!` the code uses passes no
+matter what either one says. A test that hardcodes the rendered message breaks
+on every wording change. Both put the wording in the assertion's way.
+
+```rust
+// DON'T: the error is a string, so every test has to spell one out
+fn load(path: &Path) -> Result<Config, String> {
+    Err(format!("`{}` is not a .toml file", path.display()))
+}
+
+#[test]
+fn load_non_toml_path_is_rejected() {
+    let error = load(Path::new("config.json")).unwrap_err();
+
+    assert_eq!(error, format!("`{}` is not a .toml file", "config.json"));
 }
 ```
 
-The first line is the rustdoc summary in index and search results: keep it to one
-sentence that stands on its own. In doc comments and explanatory comments, keep
-later paragraphs short and put a blank comment line between distinct thoughts
-rather than packing them into one large paragraph. Bullet continuations indent
-to sit under the bullet's *text*, not the marker; the misaligned form is parsed
-as a new paragraph and drops out of the list.
+An enum carries the facts and `Display` carries the wording (ID-3). The
+assertion then names the variant and its fields, so rewording touches no test:
 
-The blank line before `line` is DOC-2. Without it, the reader cannot tell whether
-the comment on `name` covers the two fields below it.
+```rust
+// DO
+use std::fmt::{self, Display, Formatter};
+use std::path::PathBuf;
 
-## DOC-3: what goes in a `//!` header
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    WrongExtension { found: String },
+    Missing { path: PathBuf },
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::WrongExtension { found } => write!(f, "`{found}` is not a .toml file"),
+            Self::Missing { path } => write!(f, "cannot read `{}`", path.display()),
+        }
+    }
+}
+
+#[test]
+fn load_non_toml_path_is_rejected() {
+    const PATH: &str = "config.json";
+
+    let error = load(Path::new(PATH)).unwrap_err();
+
+    assert_eq!(error, Error::WrongExtension { found: PATH.into() });
+}
+```
+
+The rendering gets exactly one test of its own, against a literal rather than a
+rebuilt `format!`:
+
+```rust
+#[test]
+fn wrong_extension_displays_the_offending_name() {
+    let error = Error::WrongExtension { found: "config.json".into() };
+
+    assert_eq!(error.to_string(), "`config.json` is not a .toml file");
+}
+```
+
+### When the error is not `PartialEq`
+
+Any variant wrapping `io::Error`, `serde_json::Error` or `Box<dyn Error>` cannot
+derive `PartialEq`, and `assert_eq!` is off the table. Do not flatten the source
+error into a `String` to get comparison back. Match on the shape instead (ID-6):
+
+```rust
+// DO
+#[derive(Debug)]
+pub enum Error {
+    WrongExtension { found: String },
+    Unreadable(io::Error),
+}
+
+#[test]
+fn load_unreadable_path_reports_the_source_error() {
+    let error = load(Path::new("/nonexistent/config.toml")).unwrap_err();
+
+    assert!(
+        matches!(error, Error::Unreadable(_)),
+        "a missing file surfaces as Unreadable, not WrongExtension",
+    );
+}
+
+// DON'T: a String payload just to make the assertion compile
+pub enum Error {
+    Unreadable(String),
+}
+```
+
+The same holds for any value a test reaches for: prefer the enum variant, the
+struct, or a `const` the code already exports over a string the test assembles.
+
+## DOC-2: what goes in a `//!` header
 
 ```rust
 //! Lexing for the manifest grammar.
@@ -621,40 +800,7 @@ Purpose, the handful of entry points a caller starts from, then the invariants
 and ordering requirements that will surprise the next reader. Link items with
 `[`Item`]` so the header stays navigable.
 
-## DOC-4: what a good doc comment adds
-
-```rust
-// DON'T: pure restatement
-/// PersonBuilder is a struct that follows the builder pattern and builds a
-/// person.
-pub struct PersonBuilder { /* ... */ }
-
-// DON'T: a comment patching a bad name; rename instead
-/// Pbldr is a person builder.
-pub struct Pbldr { /* ... */ }
-
-// DO: adds what the name cannot
-/// Builds a [`Person`].
-///
-/// # Panics
-///
-/// Panics if [`Self::build`] is called before [`Self::name`].
-pub struct PersonBuilder { /* ... */ }
-```
-
-## DOC-5: the conventional headings
-
-| Heading | Means |
-| --- | --- |
-| `# Safety` | The contract a caller must uphold to call an `unsafe` fn soundly |
-| `# Panics` | Conditions under which this panics |
-| `# Errors` | What the `Err` variants mean |
-| `# Examples` | Compiled, tested doctests |
-
-`# Safety` on a safe function tells the reader (and `clippy::missing_safety_doc`)
-something untrue. For anything else, write your own heading.
-
-## DOC-6: never an em dash
+## DOC-3: never an em dash
 
 ```rust
 // DO
@@ -664,7 +810,7 @@ something untrue. For anything else, write your own heading.
 /// Entries are interned — two entries with the same name share storage.
 ```
 
-## DOC-7: lists look like lists
+## DOC-4: lists look like lists
 
 Always use bullets when documentation or an explanatory comment enumerates
 distinct responsibilities, behaviors, or conditions. Do not hide the list in
@@ -684,4 +830,17 @@ commas or a run-on sentence. Commas remain fine in ordinary prose.
 // DON'T
 // Responsible for parsing each record, validating its fields, and writing it to
 // storage, as long as the input is valid and the destination is writable.
+```
+
+Bullet continuations indent to sit under the bullet's *text*, not the marker.
+The misaligned form is parsed as a new paragraph and drops out of the list:
+
+```rust
+// DO
+/// - The intern table is per-`Parser`, so entries from two parsers must be
+///   compared by name.
+
+// DON'T: the continuation leaves the list
+/// - The intern table is per-`Parser`, so entries from two parsers must be
+/// compared by name.
 ```
