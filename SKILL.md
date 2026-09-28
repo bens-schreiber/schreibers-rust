@@ -92,7 +92,7 @@ than it saves. Common cases, not a closed list:
 | ID-5 | Name a local after the field it fills, then use field-init shorthand. |
 | ID-6 | Pattern matching over field access plus conditionals. `matches!` when all you need is a `bool`. |
 | ID-7 | Three blank-line-separated `use` blocks, alphabetized within each: `std`/`core`/`alloc`, external crates, internal (`crate`, `super`, `self`). Stable `rustfmt` will not group them; do it by hand. |
-| ID-8 | `.not()` when negating a chain you continue (`x.is_empty().not().then(...)`) or a bare `matches!`. In `if`/`while` condition position prefix `!` always wins, `matches!` included. |
+| ID-8 | Prefer `matches!(..).not()` over `!matches!(..)` everywhere, including `if`/`while` conditions. |
 | ID-9 | Every list in `Cargo.toml` alphabetized: dependencies, dev-dependencies, build-dependencies, features, workspace members. |
 | ID-10 | Compound generics off the LHS: `.collect::<Vec<_>>()`, not `let names: Vec<_> =`. Scalars, `const`/`static`, signatures, and expressions with no turbofish stay LHS-annotated. |
 | ID-11 | `_` for any generic parameter the compiler can infer. |

@@ -415,30 +415,18 @@ use crate::lexer::Token;
 ignores it silently. `reorder_imports` is stable and on by default, so the
 alphabetization within each block is free on either toolchain.
 
-## ID-8: `.not()` over prefix `!`
+## ID-8: `matches!(..).not()` over `!matches!(..)`
 
 ```rust
-// DO: expression position, where the negation would otherwise jump to the front
 use std::ops::Not;
 
-is_epic.not().then(|| render());
-let stale = matches!(state, State::Done).not();
-
-// DON'T: same expressions, negation stranded at the far left
-(!is_epic).then(|| render());
-let stale = !matches!(state, State::Done);
-```
-
-Condition position is the other way round. The `if` already frames the negation,
-so prefix `!` always wins there, `matches!` included:
-
-```rust
 // DO
-if !ready { wait(); }
-if !matches!(state, State::Done) { poll(); }
+let stale = matches!(state, State::Done).not();
+if matches!(state, State::Done).not() { poll(); }
 
-// DON'T: the negation lands at the far end of the line
-if ready.not() { wait(); }
+// DON'T
+let stale = !matches!(state, State::Done);
+if !matches!(state, State::Done) { poll(); }
 ```
 
 ## ID-14: no large iterator-adaptor closures

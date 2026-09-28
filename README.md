@@ -48,7 +48,7 @@ so you can skim the code and skip the prose.
 - [ID-5](#id-5-name-a-local-after-the-field-it-fills) name a local after the field it fills
 - [ID-6](#id-6-pattern-matching-over-field-access-plus-conditionals) pattern matching over field access plus conditionals
 - [ID-7](#id-7-three-blank-line-separated-use-blocks) three blank-line-separated `use` blocks
-- [ID-8](#id-8-not-when-negating-a-chain-you-continue) `.not()` when negating a chain you continue
+- [ID-8](#id-8-matchesnot-over-matches) `matches!(..).not()` over `!matches!(..)`
 - [ID-9](#id-9-alphabetize-every-list-in-cargotoml) alphabetize every list in `Cargo.toml`
 - [ID-10](#id-10-compound-generics-off-the-lhs) compound generics off the LHS
 - [ID-11](#id-11--for-any-generic-parameter-the-compiler-can-infer) `_` for any generic parameter the compiler can infer
@@ -595,29 +595,18 @@ use std::collections::HashMap;
 use std::fs;
 ```
 
-### ID-8: `.not()` when negating a chain you continue
-
-In an expression you keep building on, `.not()` keeps the negation where you
-read it. In an `if` or `while` condition the keyword already frames the
-negation, so prefix `!` wins there, `matches!` included.
+### ID-8: `matches!(..).not()` over `!matches!(..)`
 
 ```rust
-// DO: expression position
+// DO
 use std::ops::Not;
 
-is_epic.not().then(|| render());
 let stale = matches!(state, State::Done).not();
+if matches!(state, State::Done).not() { /* ... */ }
 
-// DO: condition position
-if !ready { /* ... */ }
-if !matches!(state, State::Done) { /* ... */ }
-
-// DON'T: the negation is stranded at the far left
-(!is_epic).then(|| render());
+// DON'T
 let stale = !matches!(state, State::Done);
-
-// DON'T: the negation hides at the end of the line
-if ready.not() { /* ... */ }
+if !matches!(state, State::Done) { /* ... */ }
 ```
 
 ### ID-9: alphabetize every list in `Cargo.toml`
