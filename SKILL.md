@@ -87,15 +87,14 @@ let mut parser = Parser { tokens: tokens.into_iter().peekable() };
 
 | ID | Rule |
 | --- | --- |
-| TS-1 | Unit tests in a `#[cfg(test)] mod tests` in the file under test; integration tests in the crate's `tests/`. |
-| TS-2 | `namespace_input_expectation`: subject, input condition, expected outcome. Drop `namespace` when the module or file supplies it. No `test_` prefix. |
-| TS-3 | Label Arrange, Act and Assert when any one of them exceeds a line. Skip all three labels only when all three are one-liners. An Arrange living outside the body still counts as a phase. Never extend a label with narrative. |
-| TS-4 | Bind a value in Arrange when used more than once, so a call and its assertion cannot drift. Used once, it stays inline. |
-| TS-5 | Custom panic message on any `assert*` whose failure reason is not obvious. It goes in the message, not a comment above it. |
-| TS-6 | Coalesce tests sharing most of their Arrange into one function, one case per `{}` block. Hoist only the shared Arrange; each case keeps its own Act and Assert. No shared Arrange means no TS-6, and `// Case:` is the only label those blocks take. |
-| TS-7 | Three or more tests sharing a `namespace_*` prefix become a sibling `#[cfg(test)] mod namespace_tests`, prefix dropped (TS-2). Count the group as it will stand when you finish. TS-7 runs first; coalesce with TS-6 inside the new mod. |
-| TS-8 | Test data that models a real domain thing (a site, host, region, tenant, SKU, path) gets a plausible value, not a placeholder. `"us-east-2b"`, not `"foo"`. Codebase convention wins. |
-| TS-9 | Assert on typed values, never on a string the test assembles with `format!`. Return an enum, a struct, or a well-known `const`, with `Display` for the message. When the payload is not `PartialEq`, assert with `matches!` (ID-6). A literal expected string is fine in the one test covering the rendering itself. |
+| TS-1 | `namespace_input_expectation`: subject, input condition, expected outcome. Drop `namespace` when the module or file supplies it. No `test_` prefix. |
+| TS-2 | Label Arrange, Act and Assert when any one of them exceeds a line. Skip all three labels only when all three are one-liners. An Arrange living outside the body still counts as a phase. Never extend a label with narrative. |
+| TS-3 | Bind a value in Arrange when used more than once, so a call and its assertion cannot drift. Used once, it stays inline. |
+| TS-4 | Custom panic message on any `assert*` whose failure reason is not obvious. It goes in the message, not a comment above it. |
+| TS-5 | Coalesce tests sharing most of their Arrange into one function, one case per `{}` block. Hoist only the shared Arrange; each case keeps its own Act and Assert. No shared Arrange means no TS-5, and `// Case:` is the only label those blocks take. |
+| TS-6 | Three or more tests sharing a `namespace_*` prefix become a sibling `#[cfg(test)] mod namespace_tests`, prefix dropped (TS-1). Count the group as it will stand when you finish. TS-6 runs first; coalesce with TS-5 inside the new mod. |
+| TS-7 | Test data that models a real domain thing (a site, host, region, tenant, SKU, path) gets a plausible value, not a placeholder. `"us-east-2b"`, not `"foo"`. Codebase convention wins. |
+| TS-8 | Assert on typed values, never on a string the test assembles with `format!`. Return an enum, a struct, or a well-known `const`, with `Display` for the message. When the payload is not `PartialEq`, assert with `matches!` (ID-6). A literal expected string is fine in the one test covering the rendering itself. |
 
 ## Documentation
 
@@ -109,13 +108,13 @@ let mut parser = Parser { tokens: tokens.into_iter().peekable() };
 ## Before you call it done
 
 Run these over the diff and report what each caught, by ID, including the ones
-that caught nothing. They are a net, not the rule: SC-1 and TS-7 cannot be
+that caught nothing. They are a net, not the rule: SC-1 and TS-6 cannot be
 grepped and still need reading.
 
 ```sh
-rg -n -A1 '// Case:' src/ tests/   # TS-6: next line is `{`, shared Arrange hoisted above
-rg -n -A6 '#\[test\]' src/ tests/  # TS-3: any phase over one line means all three labels
-rg -n 'assert\w*!.*format!' src/ tests/  # TS-9: assert the type, not the rendered string
+rg -n -A1 '// Case:' src/ tests/   # TS-5: next line is `{`, shared Arrange hoisted above
+rg -n -A6 '#\[test\]' src/ tests/  # TS-2: any phase over one line means all three labels
+rg -n 'assert\w*!.*format!' src/ tests/  # TS-8: assert the type, not the rendered string
 rg -n '\.unwrap\(\)' src/                # ID-2: every hit outside a `#[cfg(test)] mod`
 rg -n 'let \w+: (Vec|HashMap|HashSet|BTreeMap)<' src/ tests/  # ID-10: every hit
 ```

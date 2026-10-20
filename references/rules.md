@@ -413,7 +413,7 @@ Do not extract a single-use helper merely to keep the iterator chain: this rule
 is more specific than SC-3. ID-12 still governs the iterable when the replacement
 loop itself contains non-trivial filtering, mapping, or closure logic.
 
-## TS-2: names
+## TS-1: names
 
 ```rust
 // DO
@@ -426,7 +426,7 @@ fn tokenize_works()
 fn it_should_handle_the_case_where_the_string_is_not_terminated()
 ```
 
-## TS-3: when the labels go on
+## TS-2: when the labels go on
 
 Count the phases separately. A one-line Act against a ten-line Assert still gets
 all three labels. An Arrange living outside the body, such as a module-level
@@ -462,7 +462,7 @@ fn empty_document_parses_to_an_empty_object() {
 }
 ```
 
-## TS-4: bind what repeats, inline what doesn't
+## TS-3: bind what repeats, inline what doesn't
 
 The reason to bind is **drift**: if a call and its assertion each spell out the
 same literal, an edit to one silently passes.
@@ -487,7 +487,7 @@ Same test for derived values: compute an expectation in Arrange only when it is
 reused or when the derivation itself is the point. Use `const` where the type
 allows it, `let` otherwise.
 
-## TS-5: put the explanation in the message
+## TS-4: put the explanation in the message
 
 ```rust
 // DO
@@ -504,7 +504,7 @@ assert!(tokens.is_empty());
 `assert_eq!` already prints both sides, so it needs a message only when *why*
 they should be equal is the non-obvious part.
 
-## TS-6: a full coalesced test
+## TS-5: a full coalesced test
 
 ```rust
 #[test]
@@ -527,17 +527,17 @@ fn lookup_returns_member_only_on_exact_match() {
 ```
 
 The `// Arrange` label marks the hoisted fixture, which is the whole reason the
-cases live together. Inside the blocks every phase is one line, so TS-3 asks for
+cases live together. Inside the blocks every phase is one line, so TS-2 asks for
 no labels and `// Case:` is all they take. The case-local `const` is there
-because that case uses the value twice (TS-4).
+because that case uses the value twice (TS-3).
 
 The cost of coalescing is that the first failing case aborts the rest. Coalesce
 when the cases are variations on one behavior; keep them separate when each is a
 distinct behavior you want reported independently.
 
-## TS-7: split a prefix group into a `mod`
+## TS-6: split a prefix group into a `mod`
 
-The prefix is the symptom; the `mod` is the fix, and it is what lets TS-2 drop
+The prefix is the symptom; the `mod` is the fix, and it is what lets TS-1 drop
 the prefix. Count the group as it will stand when you finish. A file whose tests
 are being written in one pass still gets counted, because the group is complete
 by the end of that pass.
@@ -574,7 +574,7 @@ fn parse_plain_rows_split_on_commas_and_newlines() { /* ... */ }
 fn parse_quoted_field_unescapes_its_contents() { /* ... */ }
 ```
 
-## TS-8: plausible values for real domain things
+## TS-7: plausible values for real domain things
 
 A value that models a real thing in the domain reads as real data to whoever
 comes next, even when the value is invented for the test. Sites, hostnames,
@@ -600,7 +600,7 @@ const PADDED_USERNAME: &str = "  hgrant";
 const HGRANT: &str = "  hgrant";
 ```
 
-## TS-9: assert on the type, not the rendered string
+## TS-8: assert on the type, not the rendered string
 
 A test that rebuilds the message with the same `format!` the code uses passes no
 matter what either one says. A test that hardcodes the rendered message breaks

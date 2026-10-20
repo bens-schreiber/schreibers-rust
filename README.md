@@ -55,15 +55,14 @@ so you can skim the code and skip the prose.
 
 **Tests**
 
-- [TS-1](#ts-1-unit-tests-live-in-the-file-under-test) unit tests live in the file under test
-- [TS-2](#ts-2-namespaceinputexpectation) `namespace_input_expectation`
-- [TS-3](#ts-3-label-all-three-phases-when-any-one-exceeds-a-line) label all three phases when any one exceeds a line
-- [TS-4](#ts-4-bind-what-repeats-inline-what-doesnt) bind what repeats, inline what doesn't
-- [TS-5](#ts-5-custom-panic-message-when-the-failure-reason-isnt-obvious) custom panic message when the failure reason isn't obvious
-- [TS-6](#ts-6-coalesce-tests-that-share-most-of-their-arrange) coalesce tests that share most of their Arrange
-- [TS-7](#ts-7-three-tests-sharing-a-prefix-become-a-mod) three tests sharing a prefix become a `mod`
-- [TS-8](#ts-8-plausible-values-for-real-domain-things) plausible values for real domain things
-- [TS-9](#ts-9-assert-on-the-type-not-the-rendered-string) assert on the type, not the rendered string
+- [TS-1](#ts-1-namespaceinputexpectation) `namespace_input_expectation`
+- [TS-2](#ts-2-label-all-three-phases-when-any-one-exceeds-a-line) label all three phases when any one exceeds a line
+- [TS-3](#ts-3-bind-what-repeats-inline-what-doesnt) bind what repeats, inline what doesn't
+- [TS-4](#ts-4-custom-panic-message-when-the-failure-reason-isnt-obvious) custom panic message when the failure reason isn't obvious
+- [TS-5](#ts-5-coalesce-tests-that-share-most-of-their-arrange) coalesce tests that share most of their Arrange
+- [TS-6](#ts-6-three-tests-sharing-a-prefix-become-a-mod) three tests sharing a prefix become a `mod`
+- [TS-7](#ts-7-plausible-values-for-real-domain-things) plausible values for real domain things
+- [TS-8](#ts-8-assert-on-the-type-not-the-rendered-string) assert on the type, not the rendered string
 
 **Documentation**
 
@@ -684,24 +683,7 @@ chain, give that a name too.
 Where tests live, what to call them, and how to keep them from breaking on
 changes that are not bugs.
 
-### TS-1: unit tests live in the file under test
-
-`#[cfg(test)] mod tests` in the file; integration tests in the crate's `tests/`.
-
-```rust
-// DO: in src/slug.rs, next to the fn it covers
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn slugify_spaces_become_dashes() { /* ... */ }
-}
-
-// DON'T: the same test in tests/slug.rs, where private items are unreachable
-```
-
-### TS-2: `namespace_input_expectation`
+### TS-1: `namespace_input_expectation`
 
 The subject, then the input condition, then what you expect to happen. Drop
 `namespace` when the module or file already supplies it. No `test_` prefix.
@@ -717,7 +699,7 @@ fn slugify_works()
 fn it_should_handle_the_case_where_the_input_has_a_trailing_space()
 ```
 
-### TS-3: label all three phases when any one exceeds a line
+### TS-2: label all three phases when any one exceeds a line
 
 Count the phases separately. A one-line Act against a ten-line Assert still
 gets all three labels. Skip them only when all three phases are one-liners.
@@ -750,7 +732,7 @@ fn split_csv_row_yields_each_field() {
 }
 ```
 
-### TS-4: bind what repeats, inline what doesn't
+### TS-3: bind what repeats, inline what doesn't
 
 The reason to bind is drift: if a call and its assertion each spell out the same
 literal, an edit to one silently passes.
@@ -771,7 +753,7 @@ let found = roster.lookup(UNKNOWN_MEMBER);
 assert!(found.is_none());
 ```
 
-### TS-5: custom panic message when the failure reason isn't obvious
+### TS-4: custom panic message when the failure reason isn't obvious
 
 It goes in the message, not a comment above it.
 
@@ -787,10 +769,10 @@ assert!(
 assert!(tokens.is_empty());
 ```
 
-### TS-6: coalesce tests that share most of their Arrange
+### TS-5: coalesce tests that share most of their Arrange
 
 One function, one case per `{}` block. Hoist only the shared Arrange; each case
-keeps its own Act and Assert. No shared Arrange means no TS-6.
+keeps its own Act and Assert. No shared Arrange means no TS-5.
 
 ```rust
 // DO
@@ -823,12 +805,12 @@ assert_eq!(parse("true"), Ok(Value::Bool(true)));
 The cost is that the first failing case aborts the rest, so coalesce variations
 on one behavior and keep distinct behaviors separate.
 
-### TS-7: three tests sharing a prefix become a `mod`
+### TS-6: three tests sharing a prefix become a `mod`
 
-The prefix then comes off the names (TS-2). Count the group as it will stand
+The prefix then comes off the names (TS-1). Count the group as it will stand
 when you finish, not mid-write.
 
-When both this and TS-6 apply, split first and coalesce second: make the `mod`,
+When both this and TS-5 apply, split first and coalesce second: make the `mod`,
 then look for shared fixtures inside it.
 
 ```rust
@@ -858,7 +840,7 @@ fn parse_quoted_field_unescapes_its_contents() { /* ... */ }
 fn parse_unclosed_quote_reports_the_line_it_opened_on() { /* ... */ }
 ```
 
-### TS-8: plausible values for real domain things
+### TS-7: plausible values for real domain things
 
 Sites, hostnames, regions, tenants, SKUs and paths all get something the system
 could plausibly have seen. Codebase convention wins.
@@ -875,7 +857,7 @@ Name the binding for the property the test depends on, not for the value it
 holds: `const PADDED_USERNAME: &str = "  hgrant";`, not
 `const HGRANT: &str = "  hgrant";`.
 
-### TS-9: assert on the type, not the rendered string
+### TS-8: assert on the type, not the rendered string
 
 Never assert against a string the test assembles with `format!`. Rebuilding the
 message in the test asserts nothing, and hardcoding it breaks on every wording
