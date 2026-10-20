@@ -1,4 +1,4 @@
-# schreibers-rust - `v0.1.0`
+# schreibers-rust - `v0.2.0`
 
 > I spend too much time telling agents how to fix nits in Rust code. This skill encodes my style guide so they can do it themselves. 
 >
@@ -18,26 +18,23 @@ so you can skim the code and skip the prose.
 
 **Formatting**
 
-- [FMT-1](#fmt-1-blank-line-after-a-block-ending-statement) blank line after a block-ending statement
+- [FMT-1](#fmt-1-separate-independent-statements-and-comments) separate independent statements and comments
 
 **Scoping**
 
-- [SC-1](#sc-1-bind-at-the-read-count) bind at the read count
+- [SC-1](#sc-1-keep-bindings-readable) keep bindings readable
 - [SC-2](#sc-2-fence-unrelated-units-of-work-in) fence unrelated units of work in `{}`
 - [SC-3](#sc-3-nest-a-helper-fn-in-its-only-caller) nest a helper `fn` in its only caller
-- [SC-4](#sc-4-closure-when-it-captures-nested-fn-when-it-doesnt) closure when it captures, nested `fn` when it doesn't
 - [SC-5](#sc-5-closures-go-at-the-top-of-the-function-body) closures go at the top of the function body
 - [SC-6](#sc-6-no-divider-comments) no divider comments
 
 **Modules and structs**
 
 - [MS-1](#ms-1-a-mod-not-a-shared-prefix-on-free-functions) a `mod`, not a shared prefix on free functions
-- [MS-2](#ms-2-narrowest-visibility-that-compiles) narrowest visibility that compiles
+- [MS-2](#ms-2-prefer-private-or-plain-pub) prefer private or plain `pub`
 - [MS-3](#ms-3-mark-visibility-widened-only-for-tests) mark visibility widened only for tests
 - [MS-4](#ms-4-a-mod-of-free-functions-not-a-zero-field-struct) a `mod` of free functions, not a zero-field struct
-- [MS-5](#ms-5-a-struct-once-non-trivial-parameters-repeat) a struct once non-trivial parameters repeat
-- [MS-6](#ms-6-three-methods-serving-one-side-feature-is-a-component) three methods serving one side feature is a component
-- [MS-7](#ms-7-most-public-first-in-every-module) most public first in every module
+- [MS-7](#ms-7-organize-modules-coherently) organize modules coherently
 
 **Idioms**
 
@@ -79,11 +76,11 @@ so you can skim the code and skip the prose.
 
 Whitespace only. There is one rule, because `rustfmt` handles the rest.
 
-### FMT-1: blank line after a block-ending statement
+### FMT-1: separate independent statements and comments
 
-Put a blank line after a `}` when the next line starts something new. Joined
-`if` branches and the arms of a `match` are one statement, so they stay
-together.
+Use blank lines to separate independent statements and standalone comment
+blocks. Put them above and below bindings or blocks whose bodies span more than
+three lines. Keep joined `if` branches and the arms of a `match` together.
 
 ```rust
 // DO
@@ -116,23 +113,14 @@ report(items);
 
 ## Scoping
 
-Where a thing lives, and how long the reader has to remember it. Most of these
-are about keeping names out of scopes that do not need them.
+Where a thing lives, and how long the reader has to remember it.
 
-### SC-1: bind at the read count
+### SC-1: keep bindings readable
 
-Count the later scopes that read a local:
-
-- **Two or more:** bind it at top level.
-- **Exactly one:** push it into the thing that reads it.
-- **Both arms of one `if` or `match`:** that is one reader. Bind it directly
-  above the construct, not at the top of the function.
-
-Fix it in this order:
-
-1. A method chain, where one exists.
-2. A block expression, where the computation needs statements.
-3. An extracted `fn`, where it deserves a name.
+Keep a binding in the smallest scope that remains readable. Inline trivial
+one-use values; keep names that clarify a multi-step computation, an error, or a
+meaningful concept. Use a block or extract a function when that makes the scope
+clearer.
 
 ```rust
 // DO
@@ -147,18 +135,6 @@ let a_count = a.iter().count();
 let b_count = b.iter().count();
 let total = a_count + b_count;
 ```
-
-Keep the binding when pushing it in would cost the reader more than it saves.
-The cases that come up most:
-
-- A short prelude to the function's tail expression.
-- A binding whose name is what keeps a nearby `.expect()` readable.
-- A long derivation whose name is the only thing that says what it computes. A
-  chain like `x.iter().filter(..).map(..).sum()` gets a name even at one read,
-  rather than sitting inline in a call. A short, obvious chain does not.
-
-That list is not closed. The test is always whether the name buys the reader
-more than the extra line of state costs them.
 
 ### SC-2: fence unrelated units of work in `{}`
 
@@ -209,18 +185,6 @@ fn shout(line: &str) -> String { line.to_uppercase() }
 fn banner(lines: &str) -> String {
     lines.lines().map(shout).collect()
 }
-```
-
-### SC-4: closure when it captures, nested `fn` when it doesn't
-
-Never re-pass what a closure could capture.
-
-```rust
-// DO
-let weighted = |raw: u32| raw * factor + bonus;
-
-// DON'T: factor and bonus are in scope; the parameter list is noise
-let weighted = |raw: u32, factor: u32, bonus: u32| raw * factor + bonus;
 ```
 
 ### SC-5: closures go at the top of the function body
@@ -276,23 +240,19 @@ fn path_join(a: &str, b: &str) -> String { /* ... */ }
 fn path_split(s: &str) -> Vec<&str> { /* ... */ }
 ```
 
-### MS-2: narrowest visibility that compiles
+### MS-2: prefer private or plain `pub`
 
-Take the first one that compiles:
-
-1. Private
-2. `pub(super)`
-3. `pub(crate)`
-4. `pub`
-
-Reach for `pub` only when something outside the crate calls it.
+Use private visibility by default. When visibility must be widened, prefer
+plain `pub`. Do not use `pub(crate)` or `pub(super)` unless absolutely
+necessary because neither private visibility nor plain `pub` can express the
+required boundary.
 
 ```rust
 // DO
-pub(crate) fn slugify(title: &str) -> String { /* ... */ }
-
-// DON'T: nothing outside the crate calls this
 pub fn slugify(title: &str) -> String { /* ... */ }
+
+// DON'T: use restricted visibility when plain `pub` works
+pub(crate) fn slugify(title: &str) -> String { /* ... */ }
 ```
 
 ### MS-3: mark visibility widened only for tests
@@ -300,10 +260,10 @@ pub fn slugify(title: &str) -> String { /* ... */ }
 ```rust
 // DO
 // Visible for tests.
-pub(crate) fn retry_count(&self) -> u32 { /* ... */ }
+pub fn retry_count(&self) -> u32 { /* ... */ }
 
-// DON'T: the next reader assumes this is real API
-pub(crate) fn retry_count(&self) -> u32 { /* ... */ }
+// DON'T: the next reader cannot tell why this is public
+pub fn retry_count(&self) -> u32 { /* ... */ }
 ```
 
 ### MS-4: a `mod` of free functions, not a zero-field struct
@@ -324,77 +284,20 @@ impl Escape {
 }
 ```
 
-### MS-5: a struct once non-trivial parameters repeat
+### MS-7: organize modules coherently
 
-The trigger is repetition, not parameter count.
+Order every module body independently:
 
-```rust
-// DO
-struct Renderer {
-    theme: Theme,
-    fonts: FontSet,
-}
-
-impl Renderer {
-    fn header(&self) -> String { /* ... */ }
-    fn row(&self, data: &Row) -> String { /* ... */ }
-}
-
-// DON'T: theme and fonts are re-passed to everything
-mod render {
-    fn header(theme: &Theme, fonts: &FontSet) -> String { /* ... */ }
-    fn row(theme: &Theme, fonts: &FontSet, data: &Row) -> String { /* ... */ }
-}
-```
-
-### MS-6: three methods serving one side feature is a component
-
-Extracting is the fix, not more `impl` blocks on the same type. A shared prefix
-is a hint, never the trigger: methods named for the type's main job are that
-job. If the extracted type would need the parent's data handed back to it, there
-was no seam, and no finding.
-
-```rust
-// DO: History owns its state outright, so it needs nothing from the Editor
-struct History {
-    past: Vec<String>,
-}
-
-impl History {
-    fn push(&mut self, text: String) { self.past.push(text); }
-    fn undo(&mut self) -> Option<String> { self.past.pop() }
-    fn is_empty(&self) -> bool { self.past.is_empty() }
-}
-
-struct Editor {
-    text: String,
-    history: History,
-}
-
-// DON'T: a history_* namespace bolted onto the editor
-impl Editor {
-    fn history_push(&mut self, text: String) { /* ... */ }
-    fn history_undo(&mut self) { /* ... */ }
-    fn history_is_empty(&self) -> bool { /* ... */ }
-}
-```
-
-### MS-7: most public first in every module
-
-Apply this order independently in crate roots and every file-backed, inline, or
-nested module:
-
-1. `//!` module documentation
-2. External module declarations (`mod foo;`), whatever their visibility
+1. Inner module documentation (`//!`)
+2. External module declarations (`mod foo;`), regardless of visibility
 3. Imports and re-exports
 4. Macro definitions
 5. Constants and statics, most public first
-6. Everything else, most public first: `pub`, `pub(crate)`, `pub(super)`,
-   `pub(in ...)`, private
+6. Everything else, most public first: plain `pub`, exceptional restricted
+    visibility, private
 
-Types and traits go wherever their visibility tier allows, so group them however
-explains the code best. Visibility beats declaration order, with one exception:
-a `macro_rules!` has to sit above any `mod` that uses it, or the build breaks.
+Group related items coherently. A macro must appear before any item that uses it
+when textual ordering requires it.
 
 ```rust
 // DO
@@ -415,13 +318,12 @@ mod client {
 
     pub struct Client;
 
-    pub(crate) fn default_client() -> Client { /* ... */ }
+    pub fn default_client() -> Client { /* ... */ }
 
     fn validate_endpoint() -> Result<(), Error> { /* ... */ }
 }
 
-// DON'T: `mod` under the imports, private helper above what it serves,
-// and a macro below the module that expands it
+// DON'T: the macro is below the item that uses it
 mod client {
     use crate::Error;
 
@@ -433,7 +335,7 @@ mod client {
 
     fn validate_endpoint() -> Result<(), Error> { /* ... */ }
 
-    pub(crate) fn default_client() -> Client { /* ... */ }
+    pub fn default_client() -> Client { /* ... */ }
 
     pub struct Client;
 }

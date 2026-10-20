@@ -4,7 +4,7 @@ Elaboration on `SKILL.md`. Only rules whose shape needs more than a table row
 appear here; the rest are complete as written. SC-1 carries its own DO/DON'T in
 `SKILL.md` and is elaborated rather than repeated.
 
-## FMT-1: separate block-ending statements
+## FMT-1: separate independent statements and comments
 
 ```rust
 // DO
@@ -163,102 +163,20 @@ fn load_manifest(src: &str) -> Result<Vec<Row>, ParseError> {
 }
 ```
 
-## SC-4: closure when it captures
+## MS-7: organize modules coherently
 
-```rust
-// DO: the closure captures the fixtures it needs
-let weighted = |raw: u32| raw * weights.factor + bonus;
-
-// DON'T: weights and bonus are in scope; the parameter list is pure noise
-let weighted = |raw: u32, weights: &Weights, bonus: u32| raw * weights.factor + bonus;
-```
-
-## MS-5: a struct once parameters repeat
-
-The trigger is repetition, not parameter count: two functions sharing two
-parameters is a struct; one function taking four one-off arguments is not.
-
-```rust
-// DO
-struct Renderer {
-    theme: Theme,
-    fonts: FontSet,
-}
-
-impl Renderer {
-    fn header(&self) -> String { /* ... */ }
-    fn row(&self, data: &Row) -> String { /* ... */ }
-}
-
-// DON'T: theme and fonts are re-passed to everything
-mod render {
-    fn header(theme: &Theme, fonts: &FontSet) -> String { /* ... */ }
-    fn row(theme: &Theme, fonts: &FontSet, data: &Row) -> String { /* ... */ }
-}
-```
-
-## MS-6: componentize, do not re-file the `impl`
-
-More `impl` blocks on the same type, in one file or several, still hand every
-method `&mut self` on the whole struct. Extract the cluster instead; the method
-prefixes it sheds (`comment_queue` to `queue`) confirm the seam.
-
-A shared prefix is a hint, never the trigger. Methods named for the type's main
-job (`parse_header`, `parse_body`, `parse_footer` on a `Parser`) are that job,
-not a side feature, and extracting them produces a component that has to borrow
-its way back into the original. If the extracted type would need the parent's
-data passed in, there was no seam.
-
-```rust
-// DO: comment state is reachable only from the methods that own it
-struct CommentCtx {
-    pending: Vec<Comment>,
-    last_flushed_line: u32,
-}
-
-struct LanguageFormatter {
-    comments: CommentCtx,
-    indent: u32,
-}
-
-// DON'T: a second impl block or comment_* namespace 
-impl LanguageFormatter {
-    fn comment_queue(&mut self, comment: Comment) { /* ... */ }
-}
-```
-
-Struct or `mod` is MS-4 and MS-5, on the cluster's state: `CommentCtx` holds
-state across calls, whereas an `escape` cluster that only transforms arguments
-is a `mod` of free functions. Files follow the components, so
-`src/formatter/comments.rs` holds `CommentCtx` and its `impl` together.
-
-## MS-7: most public first in every module
-
-Apply this ordering independently to the crate root and every file-backed,
-inline, or nested module:
+Order every module body independently:
 
 1. Inner module documentation (`//!`)
 2. External module declarations (`mod foo;`), regardless of visibility
 3. Imports and re-exports
 4. Macro definitions
 5. Constants and statics, most public first
-6. Everything else, most public first: `pub`, `pub(crate)`, `pub(super)`,
-   `pub(in ...)`, private
+6. Everything else, most public first: plain `pub`, exceptional restricted
+    visibility, private
 
-An external module declaration has no body in the current file, such as
-`mod client;` or `pub(crate) mod protocol;`. An inline module such as
-`mod client { ... }` remains in its visibility tier.
-
-Types and traits go anywhere their visibility tier allows, so group them however
-explains the code best. Inherent `impl` blocks take the same tiers internally
-and sit at the tier of their most-visible method. Keep outer documentation and
-attributes attached to the item they describe.
-
-One exception outranks the order: `macro_rules!` is textually scoped, so a macro
-stays above any `mod` that uses it. Moving a `mod` above it stops compiling.
-
-Otherwise visibility outranks declaration and composition order, and a visible
-item stays above the less-visible helper it calls.
+Group related items coherently. A macro must appear before any item that uses it
+when textual ordering requires it.
 
 ```rust
 mod client {
