@@ -1,4 +1,4 @@
-# schreibers-rust - `v0.1.0`
+# schreibers-rust - `v0.2.0`
 
 > I spend too much time telling agents how to fix nits in Rust code. This skill encodes my style guide so they can do it themselves. 
 >
